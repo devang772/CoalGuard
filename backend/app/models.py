@@ -409,15 +409,23 @@ class EscalationRule(Base):
 
 
 class ReportLog(TimestampMixin, Base):
+    """A generated report file (PDF / Excel) with its SHA-256 fingerprint and approval status."""
     __tablename__ = "report_logs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    mine_id: Mapped[int | None] = mapped_column(ForeignKey("org_units.id"))
+    kind: Mapped[str] = mapped_column(String(30), default="monthly_compliance")
+    mine_id: Mapped[int | None] = mapped_column(ForeignKey("org_units.id"), index=True)   # null = several mines
+    org_id: Mapped[int | None] = mapped_column(ForeignKey("org_units.id"))              # the scope that was reported
+    scope_label: Mapped[str] = mapped_column(String(150), default="")
     month: Mapped[str] = mapped_column(String(7))                        # YYYY-MM
     format: Mapped[str] = mapped_column(String(5))                       # pdf / xlsx
-    file_path: Mapped[str] = mapped_column(String(300))
-    hash: Mapped[str] = mapped_column(String(64))
+    file_path: Mapped[str] = mapped_column(String(300))                  # storage reference (local or cloudinary)
+    size_bytes: Mapped[int | None] = mapped_column(Integer)
+    hash: Mapped[str] = mapped_column(String(64), index=True)
+    status: Mapped[str] = mapped_column(String(12), default="generated")  # generated / approved / rejected
     generated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    approved_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class AuditLog(Base):

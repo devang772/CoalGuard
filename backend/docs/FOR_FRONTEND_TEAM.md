@@ -16,7 +16,7 @@ Branch: `backend` · Folder: `backend/` · Live API docs (when running): **http:
 | 6. Contractors, workers, attendance, fraud | ✅ | contractors (list, 360, add/edit, alerts, score), workers (list, add/edit/deactivate), attendance (self + gate mode, monitor, summary, my attendance) |
 | 7. Field reports, SOS, grievances, notifications, sync | ✅ | field reports (app + voice, anonymous, auto-CAPA), SOS + acknowledge, grievances (anonymous + token tracking), notifications + live WebSocket, offline download pack + bulk sync |
 | 8. Reminders + escalation | ✅ | escalation rules (admin), jobs status + "Run now", CAPA escalation timeline, reminder / escalation / digest notifications |
-| 9. Dashboards, leaderboard, reports | ⏳ next | |
+| 9. Dashboards, leaderboard, reports | ✅ | command & mine dashboards, leaderboard, PDF/Excel reports (generate, history, download, verify, approve), demo script |
 
 Until an endpoint exists, keep using your **mock data**, but shape it like the contracts in your frontend prompt
 (and the changes listed below).
@@ -202,7 +202,7 @@ All endpoints are live in Swagger (`/docs`) and all of them respect the user's a
 - `GET /mines?org_id=` → list of mine summaries:
 ```json
 {
-  "id": 6, "name": "Kusunda OCP", "code": "MINE-KUSUNDA-OCP", "mine_type": "OC",
+  "id": 7, "name": "Kusunda OCP", "code": "MINE-KUSUNDA-OCP", "mine_type": "OC",
   "subsidiary": "BCCL", "area": "Kusunda Area", "center_lat": 23.78, "center_lng": 86.392,
   "manager_name": "Mine Manager, Kusunda OCP",
   "compliance_pct": 50.2,
@@ -870,3 +870,100 @@ Show it as a timeline: Level 1 = Area GM, 2 = Subsidiary, 3 = CIL. Seeded CAPAs 
 - If Cloudinary is unreachable, `POST /evidence` returns `503` with
   `"The photo storage service is not reachable right now. Please try again."`. Keep the photo in the offline
   outbox and retry.
+
+---
+
+### Module 9: Dashboards, leaderboard, PDF/Excel reports ✅ (backend complete)
+Rebuild your local database and re-seed (report columns changed). **All backend endpoints now exist.**
+The full list is in `backend/README.md`, and the 5-minute judges' flow is in [DEMO_SCRIPT.md](DEMO_SCRIPT.md).
+
+#### Screens you can now connect
+| Screen | Endpoints |
+|---|---|
+| Web: Command Dashboard | `GET /dashboard/summary?org_id=` |
+| Web: Mine Detail (charts tab) | `GET /dashboard/mine/{id}?days=60` |
+| Web: Leaderboard (podium + table, mines / subsidiaries toggle) | `GET /dashboard/leaderboard?month=YYYY-MM&by=mine` or `by=subsidiary` |
+| Web: Reports page | `POST /reports`, `GET /reports`, `GET /reports/{id}`, `GET /reports/{id}/file`, `POST /reports/verify`, approve via `POST /approvals` |
+| Mobile (optional): report download | the report `url` |
+
+Roles: dashboards = everyone except workers and contractor admins. Reports = safety officer and above, plus the regulator.
+Report approval = `mine_manager, area_gm, subsidiary_admin, cil_admin` (**not** the person who generated it).
+
+#### `GET /dashboard/summary` (real values, CIL admin, sample data)
+```json
+{"scope": {"mines": 12, "as_of": "2026-09-26"},
+ "compliance_pct": 77.0, "compliance_pct_previous": 78.5, "compliance_delta": -1.5,
+ "overdue_tasks": 292,
+ "open_capas": {"total": 70, "lt7": 36, "d7_30": 30, "gt30": 4, "overdue": 23},
+ "incidents_month": 9, "incidents_previous": 10, "near_miss_month": 24, "near_miss_previous": 38,
+ "avg_trust_score": 86.2, "avg_trust_score_previous": 85.9,
+ "active_workers_today": 463, "active_workers_same_day_last_week": 470, "invalid_attendance_today": 55,
+ "active_sos": 1,
+ "top_risky_mines": [{"mine_id": 7, "mine_name": "Kusunda OCP", "risk_pct": 100.0, "level": "high",
+                      "reasons": [{"factor": "Overdue CAPAs", "value": 13, "impact_pct": 52.0}],
+                      "source": "simple_score", "top_reason": "Overdue CAPAs"}],
+ "compliance_trend": [{"month": "2026-04", "pct": 88.5}, {"month": "2026-05", "pct": 90.8}, {"month": "2026-06", "pct": 88.4},
+                      {"month": "2026-07", "pct": 79.1}, {"month": "2026-08", "pct": 78.7}, {"month": "2026-09", "pct": 76.5}],
+ "incidents_trend": [{"month": "2026-04", "incidents": 2, "near_miss": 12}, {"month": "2026-08", "incidents": 10, "near_miss": 34}],
+ "capa_by_category": [{"category": "haul_road", "open": 12, "closed": 60}],
+ "recent_alerts": [{"id": 1, "title": "…", "body": "…", "level": "critical", "kind": "sos", "link": "…", "read": false, "created_at": "…"}]}
+```
+(Lists shortened here; `avg_trust_score_previous`, `active_workers_same_day_last_week`, `capa_by_category` values are
+illustrative, the rest are from a real run.) KPI card delta = value − `*_previous` (the previous 30 days).
+"Workers present" compares with the same weekday last week. `recent_alerts` = the viewer's latest warning/critical notifications.
+
+#### `GET /dashboard/mine/{id}`
+`{"mine": {…same as GET /mines/{id}… incl. risk}, "compliance_30d": {…with by_category…},
+"production": [{"date", "produced_t", "dispatched_t", "dispatch_ratio", "suspicious"}], "suspicious_dispatch_days": 3,
+"environment": [{"date", "pm10", "noise", "over_limit"}], "pm10_limit": 100.0, "pm10_days_over_limit": 0,
+"open_capas": [{"id", "status", "severity", "category", "description", "due_at", "overdue", "escalation_level"}],
+"recent_observations": [...field report objects...], "contractors": [...5 lowest-score contractors...]}`
+- Production chart: two lines (produced, dispatched), with `suspicious` days (dispatch < 80% of production) as red dots.
+  Bastacolla OCP shows 3 such days in the last 60 days (6 across the 180 days).
+- PM10 chart: a line with a dashed limit at `pm10_limit`, and `over_limit` points in red (Ashoka OCP has the spikes).
+
+#### `GET /dashboard/leaderboard?month=2026-09`
+```json
+{"month": "2026-09", "by": "mine", "rows": [
+  {"rank": 1, "id": 15, "name": "Bhurkunda UG", "subsidiary": "CCL", "area": "Barka-Sayal Area",
+   "safety_score": 90.8, "previous_score": 84.0, "trend": "up",
+   "compliance_pct": 80.0, "capa_on_time_pct": 100.0, "incidents": 0, "overdue_capas": 0, "avg_trust_score": 88.1,
+   "breakdown": {"compliance": 32.0, "capa_on_time": 25.0, "photo_trust": 8.8, "no_incidents": 25.0, "overdue_penalty": 0.0}},
+  {"rank": 12, "name": "Kusunda OCP", "safety_score": 25.6, "previous_score": 60.2, "trend": "down"}]}
+```
+(Rows shortened; Bhurkunda's `capa_on_time_pct`, `avg_trust_score` and `breakdown` values are illustrative.)
+Score = 40% compliance + 25% CAPAs closed on time + 10% photo trust + (25 − 8 per incident) − 2 per overdue CAPA
+(max 10). Show the `breakdown` in a tooltip. `by=subsidiary` → rows `{rank, id, name, code, mines, safety_score,
+previous_score, trend, incidents, overdue_capas}` (sample: MCL 83.5 > CCL 74.0 > BCCL 66.2).
+The month defaults to the current month; the previous month is used for `trend`.
+
+#### Reports
+- `POST /reports` body `{"month": "2026-09", "mine_id": 4, "org_id": null, "formats": ["pdf", "xlsx"]}`.
+  Leave `mine_id` empty for **all mines** in `org_id` (default: the user's own area); e.g. a GM gets "Jharia Area". Response:
+```json
+{"reports": [{"id": 1, "kind": "monthly_compliance", "month": "2026-09", "format": "pdf", "scope_label": "Moonidih UG",
+              "mine_id": 4, "org_id": 4, "size_bytes": 5603, "sha256": "27726c88496b…", "status": "generated",
+              "generated_by": 4, "generated_by_name": "Vikram Mahato (Manager Moonidih)",
+              "approved_by": null, "approved_by_name": null, "approved_at": null, "approvals_verified": true,
+              "stored_in": "local", "url": "/reports/1/file?sig=…", "created_at": "…"}],
+ "summary": {"compliance_pct": 75.0, "tasks_due": 168, "incidents": 0, "capas_opened": 12,
+             "suspicious_dispatch_mines": 0, "pm10_days_over_limit": 0}}
+```
+  One entry per requested format. It takes ~0.3 s. The `summary` is a quick preview for the page.
+- **PDF** (A4, 2 pages for one mine): compliance summary + by category · obligations (most missed first) · inspections &
+  findings · CAPAs · field reports & incidents · attendance & contractors · PM10 · production vs dispatch. English only
+  (PDF fonts: "Rs" instead of ₹).
+  **Excel** sheets: Summary, Compliance by category, Obligations, Inspections & findings, Field reports, Incidents,
+  Contractors, Environment, Production.
+- `GET /reports?month=&mine_id=&status=generated|approved|rejected&page=` → history (newest first, only your area).
+  `GET /reports/{id}` → one report.
+- **Download:** `API_BASE + report.url` (signed, 12 h, no header needed). The file comes with
+  `Content-Disposition: attachment` (local) or a 307 redirect (Cloudinary). A Bearer token also works.
+- **Approve & sign:** `POST /approvals` `{"entity": "report", "entity_id": 1, "decision": "approve", "remark": "…"}`
+  (or `"reject"`, remark required). The generator gets `403` ("Two-person rule: you generated this report, so someone else
+  must approve it."). A second decision → `409`. After approval: `status: "approved"`, `approved_by_name`, `approved_at`.
+  Show an "Approved by … on …" stamp in the UI; the file itself is never changed, so its fingerprint stays valid.
+  The generator is notified (`kind: "report"`).
+- **Verify:** `POST /reports/verify` (multipart `file`) →
+  `{"match": true, "sha256": "…", "message": "Unchanged: this file matches the generated report.", "report": {"id", "month", "format", "scope_label", "status", "created_at"}}`
+  or `{"match": false, "message": "No report with this fingerprint: the file was changed or was not generated by Khanan Netra."}`.

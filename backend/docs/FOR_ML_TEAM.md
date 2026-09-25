@@ -16,7 +16,7 @@ Branch: `backend` · Folder: `backend/` · Your code goes in `backend/app/ai/` a
 | 6. Contractors, attendance, fraud | ✅ | rule-based ghost-worker / labour alerts = your baseline; new attendance columns |
 | 7. Field reports, SOS, grievances, sync | ✅ | voice reports stored with transcript + language; more near-miss/incident data; grievance texts |
 | 8. Reminders + escalation | ✅ | escalation levels over time = accountability features; reminders_sent |
-| 9. Dashboards + reports | ⏳ next | dashboards reuse `predict_risk()` |
+| 9. Dashboards + reports | ✅ | dashboards + leaderboard use your `predict_risk()` automatically; final plug-in checklist below |
 
 ---
 
@@ -185,7 +185,7 @@ safely if they don't, so you can merge at any time.
 6. Tasks are created for the current period of every active obligation.
 
 **How to test your engine end-to-end:** start the server, log in as `9000000001` in `/docs`, call
-`PUT /mines/5/profile` (Dhansar UG) or `POST /mines/4/obligations/refresh` (Moonidih UG), and check that the
+`PUT /mines/8/profile` (Dhansar UG) or `POST /mines/4/obligations/refresh` (Moonidih UG), and check that the
 response shows `"source": "ml_engine"` plus the `added` / `removed` codes. The automated tests in
 `tests/test_compliance.py` (`test_ml_engine_*`) show how a fake engine is injected, so you can reuse the pattern.
 
@@ -411,3 +411,30 @@ Same rule as before: use ORM changes (not bulk statements), so the audit chain s
 - If you need a photo elsewhere, call `app.services.storage.readable_copy(evidence.file_path)`. It returns a local
   `Path` (a temporary copy for Cloudinary files), or `None` for sample-data rows. Don't build Cloudinary URLs yourself.
 - Uploads keep running Satya Proof **before** storage, so `phash`, `sha256`, `exif` and `trust_score` are filled as before.
+
+---
+
+### Module 9: Dashboards, leaderboard, reports ✅ (backend complete)
+**Rebuild your local DB and re-seed** (the report table changed). `pip install -r requirements.txt` (fpdf2, openpyxl).
+- The **Command Dashboard** (`top_risky_mines`), mine lists, the map and mine dashboards all call your
+  `predict_risk(db, mine_ids)` automatically when it exists (`risk.source` becomes `ml_model`).
+  Mines you don't return fall back to the simple score. Keep it **< 300 ms for 12 mines**: the dashboard calls it once per request.
+- The leaderboard's Mine Safety Score is deliberately **rule-based and explainable**
+  (40% compliance + 25% CAPAs on time + 10% photo trust + incident/overdue penalties). It doesn't use ML, so the
+  two views complement each other: "how did we do" (score) vs "what is likely next" (your risk).
+
+---
+
+## ✅ Final checklist: every plug-in point the backend calls
+| Your file | Function | Called by | If missing / failing |
+|---|---|---|---|
+| `app/ai/__init__.py` | (empty) | makes `app.ai` importable | nothing below is found |
+| `app/ai/obligation_engine.py` | `recommend_obligations(profile: dict) -> list[dict]` | saving a mine profile, `POST /mines/{id}/obligations/refresh` | built-in rule matcher (20 s timeout) |
+| `app/ai/risk_model.py` | `predict_risk(db, mine_ids) -> list[dict]` | `/mines`, `/gis/mines`, `/dashboard/*` | simple explainable score |
+| `app/ai/photo_check.py` | `verify_hazard_gone(before_path, after_path, finding_text) -> dict` | CAPA "I fixed it" with an after-photo | AI check skipped |
+| `app/routers/ai.py` | your `/ai/*` endpoints (`/ai/voice`, `/ai/ocr`, `/ai/anomalies`, `/ai/recurring`, `/ai/ask`, `/ai/photo-check`, …) | frontend directly | — |
+
+To add your router, append **one line** each to `app/main.py`: `from app.routers import ai` and `app.include_router(ai.router)`.
+Test data: `python -m seed.generate --reset`. Contracts, shapes and planted patterns are in the sections above.
+Run the backend tests after merging: `python -m pytest -q` (119 tests; the ML-hook tests use fake modules, so they
+keep passing with or without your code).

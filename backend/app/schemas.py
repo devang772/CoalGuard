@@ -417,7 +417,7 @@ class CapaCloseRequest(BaseModel):
 
 
 class ApprovalCreate(BaseModel):
-    entity: Literal["capa"]
+    entity: Literal["capa", "report"]
     entity_id: int
     decision: Literal["approve", "reject"]
     remark: str | None = Field(default=None, max_length=2000)

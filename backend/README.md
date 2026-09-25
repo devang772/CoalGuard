@@ -1,7 +1,17 @@
 # Khanan Netra: Backend API
 
 AI-based smart governance and compliance monitoring for coal mines (SIH PS 26024).
-Built with **FastAPI + PostgreSQL**.
+Built with **FastAPI + PostgreSQL**. 119 automated tests.
+
+**What it does:** mine profile → applicable laws → task calendar · inspections → automatic CAPA fix-it tickets ·
+Satya Proof (photos that can't be faked: GPS/boundary, reused-photo, time and EXIF checks) · before/after closure
+with a two-person rule · tamper-proof hash-chained history · contractors, geofenced attendance and ghost-worker
+alerts · field reports (voice, anonymous), SOS and grievances with live push · offline sync for phones ·
+automatic reminders and an escalation ladder · dashboards, leaderboard and signed PDF/Excel reports ·
+photos/reports stored locally or on Cloudinary.
+
+**Docs:** [Frontend handoff](docs/FOR_FRONTEND_TEAM.md) · [ML handoff](docs/FOR_ML_TEAM.md) ·
+[Demo script](docs/DEMO_SCRIPT.md) · live API docs at `/docs` when running.
 
 ## Status
 | Module | What | Status |
@@ -14,7 +24,7 @@ Built with **FastAPI + PostgreSQL**.
 | 6 | Contractors, workers, attendance, fraud rules | ✅ Done |
 | 7 | Field reports, SOS, grievances, live notifications, offline sync | ✅ Done |
 | 8 | Reminders and escalation ladder | ✅ Done |
-| 9 | Dashboards, leaderboard, reports, final tests | ⏳ |
+| 9 | Dashboards, leaderboard, PDF/Excel reports, demo script | ✅ Done |
 | AI | `app/ai/` + `app/routers/ai.py`, built by the AI/ML teammate from the shared ML/AI module plan | ⏳ |
 
 ## Quick start (Windows, Git Bash or PowerShell)
@@ -142,6 +152,8 @@ app/
     scheduler.py       # APScheduler timetable (IST) + job status
     clock.py           # demo clock (DEMO_TIME_SPEED)
     storage.py         # file storage: local folder or Cloudinary (private files, expiring links)
+    dashboard.py       # command / mine dashboards and the leaderboard (Mine Safety Score)
+    reports.py         # monthly report data + PDF (fpdf2) + Excel (openpyxl) + fingerprint
   deps.py        # shared router helpers (mine-in-scope check, filters, pagination)
 seed/bootstrap.py  # org tree (CIL > 3 subsidiaries > 6 areas > 12 mines) + demo users + escalation rules
 seed/generate.py   # 6 months of sample activity with planted patterns
@@ -232,5 +244,11 @@ def recommend_obligations(profile: dict) -> list[dict]:
 | GET, PUT | `/config/escalation` | hours to fix, reminder times, escalation ladder (PUT: CIL admin) |
 | GET | `/jobs/status` | background jobs: last run, result, next run |
 | POST | `/jobs/run?job=` | run nightly / reminders / escalation / digest now (demo) |
+| GET | `/dashboard/summary` | command dashboard: KPIs vs previous 30 days, trends, top risky mines, alerts |
+| GET | `/dashboard/mine/{id}` | one mine: risk, compliance, production vs dispatch, PM10, CAPAs, reports, contractors |
+| GET | `/dashboard/leaderboard?month=&by=mine\|subsidiary` | Mine Safety Score ranking with breakdown and trend |
+| POST, GET | `/reports` | generate monthly PDF + Excel (fingerprinted) / report history |
+| GET | `/reports/{id}`, `/reports/{id}/file` | report details / download (signed link or token) |
+| POST | `/reports/verify` | upload a file: is it exactly the generated report? |
 
 Full request/response details: [docs/FOR_FRONTEND_TEAM.md](docs/FOR_FRONTEND_TEAM.md).

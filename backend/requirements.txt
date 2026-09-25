@@ -13,6 +13,8 @@ shapely>=2.0          # is a GPS point inside the mine boundary
 apscheduler>=3.10,<4  # timed jobs: reminders, escalations, nightly tasks
 tzdata>=2024.1        # Indian time zone data (needed on Windows)
 cloudinary>=1.40      # optional file storage (STORAGE_BACKEND=cloudinary)
+fpdf2>=2.7            # PDF reports
+openpyxl>=3.1         # Excel reports
 
 # testing
 pytest>=8.2
