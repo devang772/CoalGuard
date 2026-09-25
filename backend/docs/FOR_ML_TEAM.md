@@ -14,8 +14,9 @@ Branch: `backend` · Folder: `backend/` · Your code goes in `backend/app/ai/` a
 | 4. Inspections, findings, CAPA | ✅ | findings/CAPAs now also created through the API; new CAPA columns; `approvals` table filled |
 | 5. Satya Proof + audit | ✅ | **Calls your `verify_hazard_gone()`** during CAPA closure; real photo files + trust scores; audit history |
 | 6. Contractors, attendance, fraud | ✅ | rule-based ghost-worker / labour alerts = your baseline; new attendance columns |
-| 7. Field reports, SOS, grievances, sync | ⏳ next | voice reports will use your `/ai/voice` output shape |
-| 8–9 | ⏳ | dashboards reuse `predict_risk()` |
+| 7. Field reports, SOS, grievances, sync | ✅ | voice reports stored with transcript + language; more near-miss/incident data; grievance texts |
+| 8. Reminders + escalation | ⏳ next | — |
+| 9. Dashboards + reports | ⏳ | dashboards reuse `predict_risk()` |
 
 ---
 
@@ -335,3 +336,43 @@ Score = 100 − (15 per high, 7 per medium, 3 per low alert). With seed 42: **Ma
 - **`workers.bank_acc_hash`**: new accounts are stored as HMAC-SHA256 with a server secret (seeded ones are plain
   SHA-256 of a fake value). Only compare hashes for equality; there's nothing to decode.
 - Seeded attendance rows have `source='self'`. The ghost-shift extras have `gate_entry=false`, and so do ~30% of Maa Tara's regular records.
+
+---
+
+### Module 7: Field reports, SOS, grievances, notifications, offline sync ✅
+**Rebuild your local DB and re-seed** (new columns).
+
+#### How your `/ai/voice` output is used
+The mobile app calls **your** `POST /ai/voice`, shows the result, lets the worker correct it, and then sends it to
+the backend's `POST /observations` like this, so please keep your output shape as in your plan:
+| your field | goes into `observations.` |
+|---|---|
+| `transcript` (original words) | `transcript` (kept exactly, e.g. Hindi) |
+| `language` (`hi`/`bn`/`or`/`en`) | `language` |
+| `structured.type` | `type` (`unsafe_act`/`unsafe_condition`/`near_miss`/`incident`) |
+| `structured.category` | `category` (one of the 11 hazard categories) |
+| `structured.severity` | `severity` |
+| `structured.hazard` (English sentence) | `text` |
+| `structured.location_text` | `location_text` |
+Plus `source='voice'`. Voice reports don't need a photo. If you return `structured: null`, the app shows an
+empty form with the transcript filled in (as in your plan).
+
+#### What happens to reports (useful labels for your models)
+- **Incidents** and **high/critical unsafe conditions** are converted automatically into a `findings` row
+  (`inspection_id = NULL`, description prefixed `[incident] ` or `[unsafe condition] `) + a CAPA.
+  `observations.finding_id` links the two. Officers can also convert any report manually.
+- So `findings` now has two sources: inspections (`inspection_id` set) and field reports (`inspection_id IS NULL`).
+  Keep that in mind for the recurring-violation clustering (the prefix is easy to strip).
+- `observations.acknowledged_at - created_at` = the response time. For SOS this is a "response delay" feature per mine.
+- **Anonymous** reports/grievances have `reporter_id` / `user_id` = NULL, and their audit entry has `user_id` = NULL.
+  Never try to re-identify reporters.
+
+#### Grievances (optional ML)
+`grievances(category, text, language, status, created_at, responded_at, sentiment)`. The `sentiment` column is
+**empty for new grievances**. If you want, add a tiny function `app/ai/grievance_nlp.py → classify(text, language)
+-> {"sentiment": "negative|neutral|positive", "topic": "..."}` and tell the backend team; it can be called on
+submit. Not required for the demo.
+
+#### Table changes
+- `observations.finding_id` (new), `grievances.responded_by / responded_at / language` (new),
+  `notifications.kind` (new: `sos, incident, finding, capa, grievance, general`).

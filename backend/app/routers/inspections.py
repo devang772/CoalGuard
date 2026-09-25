@@ -13,6 +13,7 @@ from app.models import Capa, Checklist, Finding, Inspection, OrgUnit, User
 from app.schemas import (ChecklistOut, FindingCreate, FindingOut, InspectionCreate, InspectionDetail,
                          InspectionOut, InspectionSubmit, Page)
 from app.services.capa import create_capa_for_finding
+from app.services.notify import MANAGER_AND_GM, notify, people_for_mine
 from app.utils import ist_day_start_utc, utcnow
 
 router = APIRouter(tags=["Inspections"])
@@ -176,6 +177,11 @@ def add_finding(inspection_id: int, body: FindingCreate, response: Response,
     db.add(finding)
     db.flush()
     capa = create_capa_for_finding(db, finding)
+    if finding.severity == "critical":
+        mine_name = db.get(OrgUnit, finding.mine_id).name
+        notify(db, people_for_mine(db, finding.mine_id, MANAGER_AND_GM, exclude={user.id}),
+               f"Critical finding at {mine_name}", f"{finding.description} · fix within 24 h (CAPA #{capa.id})",
+               level="critical", kind="finding", link=f"/capa/{capa.id}")
     db.commit()
     return _finding_out(finding, capa)
 

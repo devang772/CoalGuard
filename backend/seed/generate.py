@@ -560,12 +560,12 @@ class Generator:
         for capa_id, mine_id, level, text_ in overdue:
             mine = next(m for m in self.mines if m.id == mine_id)
             rows.append(dict(user_id=self.person(mine, Role.MINE_MANAGER), title=f"CAPA #{capa_id} is overdue",
-                             body=f"{mine.name}: {text_}", level="warning", link=f"/capa/{capa_id}", read=False,
+                             body=f"{mine.name}: {text_}", level="warning", kind="capa", link=f"/capa/{capa_id}", read=False,
                              created_at=self.now - timedelta(hours=self.rng.randint(1, 48))))
             if level >= 2 and self.people.get((area_of[mine_id], Role.AREA_GM)):
                 rows.append(dict(user_id=self.people[(area_of[mine_id], Role.AREA_GM)],
                                  title=f"CAPA #{capa_id} escalated to you", body=f"{mine.name}: {text_}",
-                                 level="critical", link=f"/capa/{capa_id}", read=False,
+                                 level="critical", kind="capa", link=f"/capa/{capa_id}", read=False,
                                  created_at=self.now - timedelta(hours=self.rng.randint(1, 24))))
         self.bulk(Notification, [r for r in rows if r["user_id"]])
 

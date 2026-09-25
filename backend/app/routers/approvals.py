@@ -10,6 +10,7 @@ from app.models import User
 from app.routers.capa import load_capa
 from app.schemas import ApprovalCreate, ApprovalOut
 from app.services.approvals import history, record_approval
+from app.services.notify import notify
 from app.utils import utcnow
 
 router = APIRouter(prefix="/approvals", tags=["Approvals"])
@@ -38,6 +39,10 @@ def decide(body: ApprovalCreate, user: User = Depends(require_roles(*Role.MANAGE
         capa.status, capa.closed_at = "closed", now
     else:
         capa.status = "rejected"
+    verdict = "approved - CAPA closed" if body.decision == "approve" else "rejected - please fix again"
+    notify(db, [capa.owner_id, capa.closure_requested_by], f"Your fix for CAPA #{capa.id} was {verdict}",
+           body.remark or "", level="info" if body.decision == "approve" else "warning", kind="capa",
+           link=f"/capa/{capa.id}")
     db.commit()
     return _out(db, approval)
 

@@ -14,6 +14,7 @@ from app.schemas import CapaAssign, CapaCloseRequest, CapaDetail, CapaOut, CapaS
 from app.services.approvals import history, verify_approvals
 from app.services.capa import AFTER_PHOTO_REQUIRED, closure_checks
 from app.services.evidence import evidence_brief
+from app.services.notify import notify, people_for_mine
 from app.utils import utcnow
 
 router = APIRouter(prefix="/capa", tags=["CAPA"])
@@ -185,5 +186,13 @@ def request_closure(capa_id: int, body: CapaCloseRequest,
     capa.closure_checks = checks or None
     capa.closure_score = float(after.trust_score) if after and after.trust_score is not None else None
     capa.status = "rejected" if any(not c["passed"] for c in checks) else "in_review"
+    if capa.status == "rejected":
+        failed = [c["detail"] for c in checks if not c["passed"]]
+        notify(db, [user.id], f"Fix for CAPA #{capa.id} was rejected automatically", "; ".join(failed),
+               level="warning", kind="capa", link=f"/capa/{capa.id}")
+    else:
+        approvers = people_for_mine(db, capa.mine_id, {Role.MINE_MANAGER, Role.AREA_GM}, exclude={user.id})
+        notify(db, approvers, f"CAPA #{capa.id} fix waiting for your approval", capa.closure_note or "",
+               kind="capa", link=f"/capa/{capa.id}")
     db.commit()
     return capa_detail(db, capa)

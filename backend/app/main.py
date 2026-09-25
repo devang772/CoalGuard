@@ -7,9 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import models  # noqa: F401  (registers all tables on Base)
 from app.config import settings
 from app.db import Base, SessionLocal, engine
-from app.routers import (approvals, attendance, audit, auth, capa, contractors, evidence, gis, health,
-                         inspections, mines, org, tasks)
+from app.routers import (approvals, attendance, audit, auth, capa, contractors, evidence, gis, grievances, health,
+                         inspections, mines, notifications, observations, org, sync, tasks)
 from app.services import audit as audit_chain  # noqa: F401  (registers the automatic history hook)
+from app.services import notify as live_push  # noqa: F401  (registers the push-after-commit hook)
 from app.services.tasks import generate_tasks, mark_overdue
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -59,3 +60,7 @@ app.include_router(evidence.router)
 app.include_router(audit.router)
 app.include_router(contractors.router)
 app.include_router(attendance.router)
+app.include_router(observations.router)
+app.include_router(grievances.router)
+app.include_router(notifications.router)
+app.include_router(sync.router)

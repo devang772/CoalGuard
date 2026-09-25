@@ -564,3 +564,142 @@ class AttendanceOut(BaseModel):
 class AttendanceResult(AttendanceOut):
     checks: list[dict]
     message: str
+
+
+# ---------------------------------------------------------------- field reports, SOS, grievances, notifications
+
+ObservationType = Literal["unsafe_act", "unsafe_condition", "near_miss", "incident"]
+
+
+class ObservationCreate(BaseModel):
+    mine_id: int | None = Field(default=None, description="default: the user's own mine")
+    type: ObservationType
+    category: FINDING_CATEGORIES = "other"
+    text: str = Field(min_length=3, max_length=2000)
+    severity: SeverityLiteral = "medium"
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lng: float | None = Field(default=None, ge=-180, le=180)
+    location_text: str | None = Field(default=None, max_length=200, examples=["Seam 3, Level 2"])
+    evidence_id: int | None = None
+    source: Literal["app", "voice"] = "app"
+    language: str = Field(default="en", max_length=5)
+    transcript: str | None = Field(default=None, max_length=4000)
+    anonymous: bool = False
+    client_uuid: str | None = Field(default=None, max_length=64)
+
+
+class ObservationOut(BaseModel):
+    id: int
+    mine_id: int
+    mine_name: str
+    type: str
+    category: str | None
+    text: str
+    severity: str
+    lat: float | None
+    lng: float | None
+    location_text: str | None
+    source: str
+    language: str
+    transcript: str | None
+    anonymous: bool
+    reporter_id: int | None
+    reporter_name: str | None
+    evidence: EvidenceBrief | None
+    finding_id: int | None
+    capa_id: int | None
+    capa_status: str | None
+    acknowledged_by: int | None
+    acknowledged_by_name: str | None
+    acknowledged_at: datetime | None
+    response_minutes: float | None
+    created_at: datetime
+
+
+class SosCreate(BaseModel):
+    mine_id: int | None = Field(default=None, description="default: the user's own mine")
+    kind: Literal["fire", "roof_fall", "gas", "injury", "flooding", "other"] = "other"
+    note: str | None = Field(default=None, max_length=500)
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lng: float | None = Field(default=None, ge=-180, le=180)
+    accuracy: float | None = None
+    client_uuid: str | None = Field(default=None, max_length=64)
+
+
+class SosResult(ObservationOut):
+    notified: int
+
+
+GrievanceCategory = Literal["wages", "safety", "harassment", "facilities", "leave", "other"]
+GrievanceStatus = Literal["new", "in_progress", "resolved", "closed"]
+
+
+class GrievanceCreate(BaseModel):
+    mine_id: int | None = Field(default=None, description="default: the user's own mine")
+    category: GrievanceCategory
+    text: str = Field(min_length=5, max_length=4000)
+    anonymous: bool = True
+    language: str = Field(default="en", max_length=5)
+    client_uuid: str | None = Field(default=None, max_length=64)
+
+
+class GrievanceReceipt(BaseModel):
+    id: int
+    token: str
+    status: GrievanceStatus
+    anonymous: bool
+    message: str
+
+
+class GrievanceTrack(BaseModel):
+    token: str
+    category: str
+    status: GrievanceStatus
+    response: str | None
+    responded_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class GrievanceOut(BaseModel):
+    id: int
+    token: str
+    mine_id: int
+    mine_name: str
+    category: str
+    text: str
+    anonymous: bool
+    reporter_name: str | None
+    status: GrievanceStatus
+    response: str | None
+    responded_by_name: str | None
+    responded_at: datetime | None
+    language: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class GrievanceUpdate(BaseModel):
+    status: GrievanceStatus | None = None
+    response: str | None = Field(default=None, max_length=4000)
+
+    @model_validator(mode="after")
+    def something_to_change(self):
+        if self.status is None and not (self.response and self.response.strip()):
+            raise ValueError("Send a new status and/or a response")
+        return self
+
+
+class NotificationOut(ORMModel):
+    id: int
+    title: str
+    body: str
+    level: Literal["info", "warning", "critical"]
+    kind: str
+    link: str | None
+    read: bool
+    created_at: datetime
+
+
+class NotificationPage(Page[NotificationOut]):
+    unread: int

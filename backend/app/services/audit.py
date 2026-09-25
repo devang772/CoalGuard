@@ -92,8 +92,10 @@ def _record_changes(session: Session, flush_context) -> None:
             if action == "update" and not session.is_modified(obj, include_collections=False):
                 continue
             data = snapshot(obj)
+            # Anonymous grievances / reports: the history must not reveal who submitted them.
+            anonymous = action == "create" and getattr(obj, "anonymous", False)
             entries.append({"table_name": obj.__tablename__, "record_id": data.get("id"), "action": action,
-                            "user_id": user_id, "mine_id": _mine_of(obj, data), "data": data})
+                            "user_id": None if anonymous else user_id, "mine_id": _mine_of(obj, data), "data": data})
     entries.sort(key=lambda e: (e["table_name"], e["record_id"] or 0))
     append_entries(session.connection(), entries)
 

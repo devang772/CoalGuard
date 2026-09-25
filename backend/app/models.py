@@ -277,6 +277,7 @@ class Observation(TimestampMixin, Base):
     transcript: Mapped[str | None] = mapped_column(Text)
     anonymous: Mapped[bool] = mapped_column(Boolean, default=False)
     evidence_id: Mapped[int | None] = mapped_column(ForeignKey("evidence.id"))
+    finding_id: Mapped[int | None] = mapped_column(ForeignKey("findings.id"))   # set when turned into a CAPA
     acknowledged_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime)
     client_uuid: Mapped[str | None] = mapped_column(String(64), unique=True)
@@ -294,6 +295,9 @@ class Grievance(TimestampMixin, Base):
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))   # always null when anonymous
     status: Mapped[str] = mapped_column(String(15), default="new", index=True)  # new/in_progress/resolved/closed
     response: Mapped[str | None] = mapped_column(Text)
+    responded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime)
+    language: Mapped[str] = mapped_column(String(5), default="en")
     sentiment: Mapped[str | None] = mapped_column(String(10))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
     client_uuid: Mapped[str | None] = mapped_column(String(64), unique=True)
@@ -385,6 +389,7 @@ class Notification(TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(200))
     body: Mapped[str] = mapped_column(Text, default="")
     level: Mapped[str] = mapped_column(String(10), default="info")       # info / warning / critical
+    kind: Mapped[str] = mapped_column(String(20), default="general")     # sos / incident / capa / grievance / ...
     link: Mapped[str | None] = mapped_column(String(200))
     read: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 

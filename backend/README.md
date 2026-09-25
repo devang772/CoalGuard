@@ -12,7 +12,7 @@ Built with **FastAPI + PostgreSQL**.
 | 4 | Inspections, findings, CAPA, approvals | ✅ Done |
 | 5 | Satya Proof, before/after closure, tamper-proof audit | ✅ Done |
 | 6 | Contractors, workers, attendance, fraud rules | ✅ Done |
-| 7 | Field reports, SOS, grievances, notifications, offline sync | ⏳ |
+| 7 | Field reports, SOS, grievances, live notifications, offline sync | ✅ Done |
 | 8 | Reminders and escalation ladder | ⏳ |
 | 9 | Dashboards, leaderboard, reports, final tests | ⏳ |
 | AI | `app/ai/` + `app/routers/ai.py`, built by the AI/ML teammate from the shared ML/AI module plan | ⏳ |
@@ -122,6 +122,8 @@ app/
     audit.py           # automatic hash-chained history of every change + verify
     workforce.py       # validity status, bank-account fingerprint, attendance rules
     fraud.py           # ghost-worker / labour-compliance alerts + contractor score
+    notify.py          # who gets which notification + push after commit
+    realtime.py        # WebSocket broadcaster (in-memory; add Redis pub/sub for several servers)
   deps.py        # shared router helpers (mine-in-scope check, filters, pagination)
 seed/bootstrap.py  # org tree (CIL > 3 subsidiaries > 6 areas > 12 mines) + demo users + escalation rules
 seed/generate.py   # 6 months of sample activity with planted patterns
@@ -196,5 +198,18 @@ def recommend_obligations(profile: dict) -> list[dict]:
 | GET, PATCH | `/workers/{id}` | one worker / edit or deactivate |
 | POST | `/attendance` | mark attendance (self with selfie, or gate kiosk) with reasons |
 | GET | `/attendance`, `/attendance/summary`, `/attendance/me` | monitor / KPI counts / own history |
+| POST, GET | `/observations` | report a hazard / near-miss / incident (app or voice, can be anonymous) / list |
+| GET | `/observations/{id}` | one report |
+| POST | `/observations/{id}/acknowledge`, `/observations/{id}/convert` | seen & handling / turn into a CAPA |
+| POST | `/sos` | emergency: alerts the whole chain live |
+| GET | `/sos/active` | SOS nobody has acknowledged yet |
+| POST | `/grievances` | submit (anonymous by default) → tracking token |
+| GET | `/grievances/track/{token}` | status + reply for a token |
+| GET, PATCH | `/grievances`, `/grievances/{id}` | officers: list / view / reply + status |
+| GET | `/notifications`, `/notifications/unread-count` | my notifications + unread count |
+| POST | `/notifications/{id}/read`, `/notifications/read-all` | mark read |
+| WS | `/ws/notifications?token=` | live push of new notifications |
+| GET | `/sync/master` | offline download pack for the phone |
+| POST | `/sync/bulk` | offline queue upload, per-item created / duplicate / error |
 
 Full request/response details: [docs/FOR_FRONTEND_TEAM.md](docs/FOR_FRONTEND_TEAM.md).

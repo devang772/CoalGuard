@@ -14,8 +14,8 @@ Branch: `backend` · Folder: `backend/` · Live API docs (when running): **http:
 | 4. Inspections, findings, CAPA, approvals | ✅ | checklists, inspections (start/findings/submit/list/detail), CAPA board (list/summary/detail/assign/"I fixed it"), approve/reject with two-person rule |
 | 5. Satya Proof, before/after closure, audit | ✅ | photo upload + trust score with reasons, signed image links, automatic before/after closure checks, audit history + "Verify Chain" |
 | 6. Contractors, workers, attendance, fraud | ✅ | contractors (list, 360, add/edit, alerts, score), workers (list, add/edit/deactivate), attendance (self + gate mode, monitor, summary, my attendance) |
-| 7. Field reports, SOS, grievances, notifications, sync | ⏳ next | |
-| 8. Reminders + escalation | ⏳ | |
+| 7. Field reports, SOS, grievances, notifications, sync | ✅ | field reports (app + voice, anonymous, auto-CAPA), SOS + acknowledge, grievances (anonymous + token tracking), notifications + live WebSocket, offline download pack + bulk sync |
+| 8. Reminders + escalation | ⏳ next | |
 | 9. Dashboards, leaderboard, reports | ⏳ | |
 
 Until an endpoint exists, keep using your **mock data**, but shape it like the contracts in your frontend prompt
@@ -659,3 +659,140 @@ attendance spikes up to 47 vs ~34, 3 workers at ₹310/day) · **Damodar Transpo
 trainings) · **Hazaribagh Contractors** (licence expired; its workers' attendance is refused with
 "Contractor licence expired … work not allowed") · **Jharkhand Earthmovers** (licence expiring) ·
 **Shree Ganesh Enterprises** best, at 93.
+
+---
+
+### Module 7: Field reports, SOS, grievances, notifications (live), offline sync ✅
+Rebuild your local database and re-seed (new columns).
+
+#### Screens you can now connect
+| Screen | Endpoints |
+|---|---|
+| Mobile: Quick Report (form) | `POST /evidence` (photo) → `POST /observations` |
+| Mobile: Voice Report | ML teammate's `POST /ai/voice` → user confirms → `POST /observations` with `source: "voice"` |
+| Mobile: SOS (long-press) | `POST /sos` |
+| Web: Observations & Incidents page | `GET /observations`, `GET /observations/{id}`, `POST /observations/{id}/acknowledge`, `POST /observations/{id}/convert` |
+| Web: SOS pinned banner / dashboard alert | `GET /sos/active` + live push |
+| Mobile: Grievance new + track | `POST /grievances`, `GET /grievances/track/{token}` |
+| Web: Grievances board | `GET /grievances`, `GET /grievances/{id}`, `PATCH /grievances/{id}` |
+| Bell, Notifications page, toasts | `GET /notifications`, `GET /notifications/unread-count`, `POST /notifications/{id}/read`, `POST /notifications/read-all`, WebSocket `/ws/notifications` |
+| Mobile offline engine | `GET /sync/master`, `POST /sync/bulk` |
+
+#### Field reports
+- `POST /observations` (anyone logged in, workers too, for a mine in their area):
+```json
+{"mine_id": null, "type": "unsafe_condition", "category": "roof", "text": "Big crack in roof near conveyor 3",
+ "severity": "critical", "lat": 23.7406, "lng": 86.348, "location_text": "Seam 3, Level 2",
+ "evidence_id": 1901, "source": "app", "language": "en", "transcript": null, "anonymous": false, "client_uuid": "..."}
+```
+  - `mine_id` can be left out for mine-level users (their own mine is used).
+  - `type` ∈ `unsafe_act | unsafe_condition | near_miss | incident`; `category` = one of the 11 hazard categories.
+  - **A photo (`evidence_id`) is required** for `unsafe_condition` and `incident` when `source` is `app` (`422` otherwise).
+    Voice reports (`source: "voice"`) may come without a photo.
+  - **Voice:** send the ML result: `text` = the English hazard sentence, `transcript` = the original words,
+    `language` = `hi`/`bn`/`or`/`en`, plus `type`/`category`/`severity`/`location_text` as confirmed by the user.
+  - `anonymous: true` → the reporter is not stored (not even in the audit history). Offer a "Hide my name" toggle.
+    Note: workers can't see their own anonymous reports in "My Reports" later, so keep a local copy on the phone.
+  - **Incidents and high/critical unsafe conditions automatically become a finding + CAPA**, and the manager and GM
+    are notified. The response then has `capa_id` / `capa_status`.
+- Response (`201`, `200` for a `client_uuid` retry):
+```json
+{"id": 331, "mine_id": 4, "mine_name": "Moonidih UG", "type": "unsafe_condition", "category": "roof",
+ "text": "Big crack in roof near conveyor 3", "severity": "critical", "lat": 23.7406, "lng": 86.348,
+ "location_text": null, "source": "app", "language": "en", "transcript": null, "anonymous": false,
+ "reporter_id": 9, "reporter_name": "Birsa Hansda (Worker)",
+ "evidence": {"id": 1901, "url": "/evidence/1901/file?sig=…", "trust_score": 100, "trust_level": "verified", "…": "…"},
+ "finding_id": 901, "capa_id": 901, "capa_status": "open",
+ "acknowledged_by": null, "acknowledged_by_name": null, "acknowledged_at": null, "response_minutes": null,
+ "created_at": "2026-09-26T05:10:00"}
+```
+- `GET /observations?org_id=&mine_id=&type=near_miss,incident&severity=&source=voice&acknowledged=false&from=&to=&page=`
+  → paginated, **unacknowledged SOS first**, then newest. Workers and contractor admins get only **their own** reports.
+- `POST /observations/{id}/acknowledge` (supervisor, safety officer, manager, GM, admins) → sets `acknowledged_by/at`
+  (the first one is kept). For SOS, `response_minutes` = minutes until the first acknowledgement.
+- `POST /observations/{id}/convert` (safety officer and above) → creates a finding + CAPA (once; repeating returns the same CAPA).
+
+#### SOS
+- `POST /sos` body `{"kind": "roof_fall", "note": "Gallery 4", "lat": ..., "lng": ..., "accuracy": 8, "client_uuid": "..."}`
+  (`kind` ∈ `fire, roof_fall, gas, injury, flooding, other`; `mine_id` optional for mine-level users).
+  Response = an observation (`type: "sos"`, `severity: "critical"`, `text: "SOS: Roof fall: Gallery 4"`) + `notified`
+  (the number of people alerted: mine manager, safety officers, area GM, subsidiary admin, CIL admin).
+- `GET /sos/active` → unacknowledged SOS in the user's area, oldest first. Show a red sticky banner.
+- When someone acknowledges, the reporter gets the notification **"Help is on the way"**.
+- Offline: queue the SOS in `/sync/bulk` **and** offer the SMS fallback on the phone.
+
+#### Grievances
+- `POST /grievances` body `{"category": "wages", "text": "...", "anonymous": true, "language": "hi", "client_uuid": "..."}`
+  (`category` ∈ `wages, safety, harassment, facilities, leave, other`; **anonymous by default**; harassment is always anonymous) →
+  `{"id": 26, "token": "GRV-599467", "status": "new", "anonymous": true, "message": "Your grievance is registered. Save this token to check its status. Your name is not stored."}`.
+  Show the **token big**, with copy/share, and save it on the phone.
+- `GET /grievances/track/{token}` (any logged-in user) → `{token, category, status, response, responded_at, created_at, updated_at}`
+  with no identity. `404` for an unknown token.
+- Officers (`mine_manager, area_gm, subsidiary_admin, cil_admin`):
+  `GET /grievances?status=new,in_progress&category=&mine_id=&page=` (new first) · `GET /grievances/{id}` ·
+  `PATCH /grievances/{id}` body `{"status": "resolved", "response": "Water cooler installed."}` (at least one field).
+  A reply on a `new` grievance moves it to `in_progress` automatically. Item:
+  `{id, token, mine_id, mine_name, category, text, anonymous, reporter_name (null when anonymous), status, response,
+  responded_by_name, responded_at, language, created_at, updated_at}`. Status ∈ `new, in_progress, resolved, closed`.
+
+#### Notifications
+- `GET /notifications?unread=true&level=critical&page=` → paginated + `"unread": 3` (for the bell). Item:
+  `{"id", "title", "body", "level": "info|warning|critical", "kind", "link", "read", "created_at"}`.
+  `kind` ∈ `sos, incident, finding, capa, grievance` (+ `general`; Module 8 adds reminders/escalations).
+  `link` is a web path (e.g. `/capa/901`, `/observations/331`, `/grievances/26`); navigate there on tap.
+- `GET /notifications/unread-count` → `{"unread": 3}` · `POST /notifications/{id}/read` · `POST /notifications/read-all` → `{"marked_read": n}`.
+- **Who gets what now:** SOS → whole chain (critical) · incident / serious hazard / critical finding → mine manager + GM ·
+  "I fixed it" → mine manager + GM (to approve) · auto-rejected fix → the submitter · approved/rejected → CAPA owner + submitter ·
+  new grievance → mine manager · reply → the (named) reporter · SOS acknowledged → the SOS reporter.
+- **Live WebSocket:** `ws://<host>/ws/notifications?token=<access_token>` (`wss://` in production).
+  - First message: `{"type": "hello", "unread": 3}`; then for every new notification:
+    `{"type": "notification", "notification": {id, title, body, level, kind, link, read, created_at}}`.
+  - Send `"ping"` every ~30 s; the server answers `"pong"`. Reconnect with backoff when the connection closes.
+    A bad or expired token → the server closes with code `4401` (log in again).
+  - On a message: increase the bell count, show a toast (`critical` = red + sticky + sound), and refetch the related
+    list (SOS banner, CAPA board …). The "Live" dot = WebSocket connected.
+  - Measured on the demo: an SOS reached the GM's screen in **0.04 s**.
+
+#### Offline sync (mobile)
+- `GET /sync/master` (after login and whenever online) →
+```json
+{"server_time": "…", "today": "2026-09-26", "full": true, "user": { ...same as /auth/me... },
+ "mines": [{"id", "name", "code", "mine_type", "boundary", "center_lat", "center_lng"}],
+ "checklists": [...], "hazard_categories": [{"key": "roof", "label_en": "Roof / side", "label_hi": "छत / साइड"}],
+ "observation_types": [...], "sos_kinds": [...], "grievance_categories": [...],
+ "obligations": [{"mine_id", "id", "code", "title", "law_ref", "category", "frequency", "severity", "evidence_needed"}],
+ "tasks": [{"id", "mine_id", "obligation_id", "code", "title", "due_date", "status", "escalation_level"}],
+ "workers": [{"id", "name", "contractor_id", "contractor_name", "mine_id", "training_status", "medical_status"}]}
+```
+  `tasks` = not-done tasks due within the next 7 days (+ overdue), max 500. `workers` is filled only for gate roles
+  (supervisor, safety officer, manager, contractor admin). Always a **full** pack (it's small: the safety officer's
+  pack took 0.04 s). Use `server_time` to detect a wrong phone clock.
+- `POST /sync/bulk` body `{"items": [{"client_uuid": "...", "kind": "...", "payload": {...}}]}` (max 200 items,
+  processed **in order**; upload photos first with `POST /evidence`):
+
+| kind | payload = same body as | extra fields |
+|---|---|---|
+| `observation` | `POST /observations` | |
+| `sos` | `POST /sos` | |
+| `grievance` | `POST /grievances` | |
+| `attendance` | `POST /attendance` | |
+| `inspection` | `POST /inspections` | |
+| `finding` | `POST /inspections/{id}/findings` | `inspection_id` **or** `inspection_client_uuid` |
+| `inspection_submit` | `POST /inspections/{id}/submit` | `inspection_id` **or** `inspection_client_uuid` |
+| `task_complete` | `POST /tasks/{id}/complete` | `task_id` |
+| `capa_close` | `POST /capa/{id}/request-closure` | `capa_id` |
+
+  The item's `client_uuid` is used as the record's `client_uuid`, so don't put another one in the payload.
+  Response:
+```json
+{"results": [{"client_uuid": "demo-1", "kind": "observation", "status": "created", "server_id": 332, "http_status": 200},
+             {"client_uuid": "demo-3", "kind": "observation", "status": "error", "server_id": null, "http_status": 422,
+              "error": "text: Field required"},
+             {"client_uuid": "demo-1", "kind": "observation", "status": "duplicate", "server_id": 332, "http_status": 200}],
+ "summary": {"created": 2, "duplicate": 1, "error": 1}, "server_time": "…"}
+```
+  - `created` / `duplicate` → remove the item from the phone's outbox and store `server_id`.
+  - `error` → keep it and show `error`. `http_status` tells the type: 403 = no permission (don't retry),
+    404 = a missing parent (e.g. the inspection wasn't sent yet), 409 = conflict (e.g. task already done by someone else),
+    422 = bad data (fix the form), 500 = retry later.
+  - One bad item never stops the others; re-sending the whole queue is safe (you'll get `duplicate`).
