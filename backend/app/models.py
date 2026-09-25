@@ -112,7 +112,9 @@ class MineObligation(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     mine_id: Mapped[int] = mapped_column(ForeignKey("org_units.id"), index=True)
     obligation_id: Mapped[int] = mapped_column(ForeignKey("obligations.id"), index=True)
-    status: Mapped[str] = mapped_column(String(15), default="active")    # active / not_applicable
+    # active; not_applicable = manager decided it does not apply (kept on re-sync);
+    # inactive = no longer recommended for the current profile (system decision)
+    status: Mapped[str] = mapped_column(String(15), default="active", index=True)
     reason: Mapped[str] = mapped_column(Text, default="")                # why it applies
     confidence: Mapped[float] = mapped_column(Float, default=1.0)
     source: Mapped[str] = mapped_column(String(15), default="rules_fallback")  # ml_engine / rules_fallback

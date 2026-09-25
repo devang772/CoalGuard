@@ -8,7 +8,7 @@ Built with **FastAPI + PostgreSQL**.
 |---|---|---|
 | 1 | Foundation: setup, all tables, login, roles, scope filter | ✅ Done |
 | 2 | Fake data generator + mine profile / applicable-obligation tables | ✅ Done |
-| 3 | Mine profile, applicable obligations, compliance tasks, map data | ⏳ |
+| 3 | Mine profile, applicable obligations, compliance tasks, map data | ✅ Done |
 | 4 | Inspections, findings, CAPA, approvals | ⏳ |
 | 5 | Satya Proof, before/after closure, tamper-proof audit | ⏳ |
 | 6 | Contractors, workers, attendance, fraud rules | ⏳ |
@@ -106,6 +106,11 @@ app/
   routers/       # one file per feature area (auth, health, ...)
   services/
     applicability.py   # fallback "which obligations apply to this mine profile" matcher
+    obligation_sync.py # profile -> ML engine (or fallback) -> mine_obligations -> tasks
+    tasks.py           # task maker, overdue marker, compliance %
+    risk.py            # risk % per mine (ML model or simple score)
+    mines.py           # mine summary numbers for lists and the map
+  deps.py        # shared router helpers (mine-in-scope check, filters, pagination)
 seed/bootstrap.py  # org tree (CIL > 3 subsidiaries > 6 areas > 12 mines) + demo users + escalation rules
 seed/generate.py   # 6 months of sample activity with planted patterns
 seed/sample_data.py  # sample obligation catalogue, mine profiles, checklists, texts, names
@@ -142,3 +147,21 @@ def recommend_obligations(profile: dict) -> list[dict]:
 | GET | `/health` | API + database check |
 | POST | `/auth/login` | `{phone, password}` → `{access_token, user}` |
 | GET | `/auth/me` | current user (with `mine_id`/`mine_name` if the user belongs to a mine) |
+| GET | `/org/tree`, `/org/units?type=` | org tree / flat units below the user's own unit |
+| GET | `/mines`, `/mines/{id}` | mine summaries: compliance %, overdue tasks, open CAPAs, risk |
+| GET, PUT | `/mines/{id}/profile` | mine profile; saving re-computes applicable obligations + tasks |
+| GET | `/mines/{id}/obligations` | applicable obligations with the reason |
+| PATCH | `/mines/{id}/obligations/{link_id}` | mark not applicable (remark required) / active again |
+| POST | `/mines/{id}/obligations/refresh` | ask the ML engine again with the saved profile |
+| GET | `/obligations` | obligation catalogue |
+| GET | `/mines/{id}/calendar?month=` | per-day done / pending / overdue counts |
+| GET | `/mines/{id}/compliance` | compliance % (default last 30 days), by category |
+| GET | `/tasks` | paginated compliance tasks with filters |
+| GET | `/tasks/summary` | counts for quick tabs / mobile home |
+| GET | `/tasks/{id}` | one task |
+| POST | `/tasks/{id}/complete` | mark done (idempotent with `client_uuid`) |
+| POST | `/tasks/generate` | create current-period tasks, mark overdue |
+| GET | `/gis/mines` | GeoJSON mine boundaries with status properties |
+| GET | `/gis/pins` | findings / observations / incidents / SOS pins |
+
+Full request/response details: [docs/FOR_FRONTEND_TEAM.md](docs/FOR_FRONTEND_TEAM.md).

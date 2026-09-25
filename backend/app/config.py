@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     auto_bootstrap: bool = True
     demo_password: str = "demo123"
 
+    # How long to wait for the ML engine before using the fallback matcher
+    ml_timeout_seconds: float = 20.0
+
     # Sample thresholds used by checks and alerts (replace with official values per state/notification)
     min_daily_wage: float = 450.0
     pm10_limit: float = 100.0

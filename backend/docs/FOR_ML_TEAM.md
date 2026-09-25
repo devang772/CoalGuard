@@ -10,8 +10,9 @@ Branch: `backend` · Folder: `backend/` · Your code goes in `backend/app/ai/` a
 |---|---|---|
 | 1. Foundation | ✅ | DB connection, `get_current_user`, `scope_mine_ids`, table names |
 | 2. Sample data + mine-profile model | ✅ | **Your training data** + the obligation-engine contract |
-| 3. Mine profile + obligations + tasks | ⏳ next | Calls your `recommend_obligations(profile)` |
-| 4–9 | ⏳ | Dashboards will call your `predict_risk()`; CAPA closure will call `verify_hazard_gone()` if present |
+| 3. Mine profile + obligations + tasks | ✅ | **Calls your `recommend_obligations(profile)`** and **your `predict_risk(db, mine_ids)`** (both optional; safe fallbacks) |
+| 4. Inspections, findings, CAPA | ⏳ next | more labelled findings/CAPAs through the API |
+| 5–9 | ⏳ | CAPA closure will call `verify_hazard_gone()` if present; dashboards reuse `predict_risk()` |
 
 ---
 
@@ -150,3 +151,64 @@ Tip: dates are relative to the day you run the generator (the window always ends
 - Finding/observation `category`: `roof, haul_road, conveyor, electrical, fire, water, dust, ppe, machinery, explosives, other`
 - `severity`: `low, medium, high, critical`
 - Escalation SLA (hours to fix): critical 24, high 72, medium 168, low 360 (table `escalation_rules`)
+
+---
+
+### Module 3: Mine profile → obligations → tasks, map ✅
+Your two plug-in points are now **live**. The backend imports your modules if they exist and falls back
+safely if they don't, so you can merge at any time.
+
+> Make `backend/app/ai/` a package (add an empty `app/ai/__init__.py`) so `import app.ai.obligation_engine` works.
+
+#### A. `app/ai/obligation_engine.py` → `recommend_obligations(profile: dict) -> list[dict]`
+**When it's called:** every time a mine profile is saved (`PUT /mines/{id}/profile`) and on
+`POST /mines/{id}/obligations/refresh`. The input and output are exactly as described in Module 2.
+
+**What the backend does with your answer** (`app/services/obligation_sync.py`):
+1. It runs your function in a background thread with a **timeout of 20 s** (`ML_TIMEOUT_SECONDS` in `.env`).
+2. **It falls back to the built-in rule matcher** if: your module or function is missing, it raises an
+   exception, it times out, or it returns something that is not a list. The API response then says
+   `"source": "rules_fallback"` with a `note` explaining why.
+3. **Invalid items are dropped (and logged):** each item needs a non-empty `code`, `title`, `category`,
+   `frequency` and `severity`, and the enum values must be valid.
+4. Valid items are **upserted into `obligations` by `code`** (`source="ml_engine"`, `created_by_ai=True`). Their title,
+   law_ref, category, frequency, severity, evidence_needed and source_text are updated every call.
+5. The mine's links in `mine_obligations` are updated:
+   - An obligation in your list that isn't linked yet → **added** as `active`, with your `reason` and `confidence`.
+   - An obligation linked before but **missing from your list** → **`inactive`**, and its future tasks are deleted.
+     ⚠️ **So return the COMPLETE list of obligations for the mine every time, not just the new ones.**
+   - An obligation a manager marked `not_applicable` stays that way, even if you recommend it again.
+6. Tasks are created for the current period of every active obligation.
+
+**How to test your engine end-to-end:** start the server, log in as `9000000001` in `/docs`, call
+`PUT /mines/5/profile` (Dhansar UG) or `POST /mines/4/obligations/refresh` (Moonidih UG), and check that the
+response shows `"source": "ml_engine"` plus the `added` / `removed` codes. The automated tests in
+`tests/test_compliance.py` (`test_ml_engine_*`) show how a fake engine is injected, so you can reuse the pattern.
+
+**Sanity checks your engine should pass** (the fallback already does):
+- An underground mine gets roof, gas and ventilation duties; an open-cast mine gets haul-road and bench duties instead.
+- Gas monitoring only when `seam_gas_degree >= 2`; explosives duties only when `uses_explosives`;
+  conveyor duties only when `has_conveyor`; garland drains only when `near_water_body`.
+- The profile of every sample mine is in `seed/sample_data.py` (`MINE_PROFILES`).
+
+#### B. `app/ai/risk_model.py` → `predict_risk(db, mine_ids: list[int]) -> list[dict]`
+**Used by:** `GET /mines`, `GET /mines/{id}` and `GET /gis/mines` (map colours). Dashboards (Module 9) will reuse it.
+Return one dict per mine:
+```python
+{"mine_id": 6, "risk_pct": 78.0, "level": "high",   # level optional: low <40, medium 40-69, high >=70
+ "reasons": [{"factor": "Overdue CAPAs", "value": 12, "impact_pct": 28.0}, ...]}   # top 3
+```
+- Mines you leave out, or any exception, fall back to the **simple score** below, so partial answers are fine.
+- It is called on every mines/map request, so keep it fast (**< 300 ms for 12 mines**). Load the trained model once
+  at import time and cache features if needed.
+
+**The simple score you are replacing** (`app/services/risk.py`, so you can compare):
+`risk_pct = min(100, 4×overdue CAPAs + 0.4×overdue tasks (30 d) + 2×near-miss/unsafe reports (14 d) + 8×incidents (30 d) + 10×monsoon)`.
+With seed 42 it gives Kusunda OCP 100 (high); every other mine scores about 20–48. Your model should also put Kusunda on top.
+
+#### New data details you may use
+- `mine_obligations.status` now has three values: `active`, `not_applicable` (manager decision) and `inactive`
+  (no longer applies to the profile).
+- Compliance % (backend definition): tasks done on or before their due date ÷ tasks that were due, grouped by the
+  Indian calendar day (`app/services/tasks.py → compliance_stats`). With seed 42, Kusunda is ~50% and the others 73–88%.
+- `today` is always the Indian date (`app.utils.today_ist()`). Use `ist_date(ts)` to convert stored UTC timestamps.

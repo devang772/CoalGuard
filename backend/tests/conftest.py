@@ -22,6 +22,15 @@ def client():
 
 
 @pytest.fixture(scope="session")
+def seeded_data(client):
+    """21 days of sample activity (generated once per test session)."""
+    from app.db import SessionLocal
+    from seed.generate import generate
+    with SessionLocal() as db:
+        return generate(db, days=21, reset=True, seed=42)
+
+
+@pytest.fixture(scope="session")
 def login(client):
     """login("9000000001") -> auth headers for that demo user."""
     cache: dict[str, dict] = {}
