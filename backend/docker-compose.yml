@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: khanan_netra_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: netra
+      POSTGRES_PASSWORD: netra
+      POSTGRES_DB: khanan_netra
+      TZ: UTC
+    ports:
+      - "${DB_PORT:-5434}:5432"   # host port 5434 by default so it does not clash with other local Postgres servers
+    volumes:
+      - netra_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U netra -d khanan_netra"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  netra_pgdata:
