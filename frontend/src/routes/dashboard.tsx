@@ -31,6 +31,11 @@ import {
   Settings,
   ShieldCheck,
   Siren,
+  Trophy,
+  Sparkles,
+  UserCheck,
+  MessageSquare,
+  Globe,
   Upload,
   UserCircle,
   Users,
@@ -64,6 +69,19 @@ import { UsersView } from "@/components/dashboard-views/UsersView";
 import { SettingsView } from "@/components/dashboard-views/SettingsView";
 import { AuditLogsView } from "@/components/dashboard-views/AuditLogsView";
 
+import { RuleStudioView } from "@/components/dashboard-views/RuleStudioView";
+import { ContractorsView } from "@/components/dashboard-views/ContractorsView";
+import { AttendanceView } from "@/components/dashboard-views/AttendanceView";
+import { GrievancesView } from "@/components/dashboard-views/GrievancesView";
+import { LeaderboardView } from "@/components/dashboard-views/LeaderboardView";
+
+import { ScopeSwitcher } from "@/components/common/ScopeSwitcher";
+import { RoleSwitcher } from "@/components/common/RoleSwitcher";
+import { AskNetraFloating } from "@/components/common/AskNetraFloating";
+import { useAppStore } from "@/store/useAppStore";
+import "@/lib/i18n";
+
+
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
     meta: [
@@ -88,11 +106,16 @@ export const Route = createFileRoute("/dashboard")({
 
 const primaryNav: Array<{ label: string; icon: LucideIcon }> = [
   { label: "Dashboard", icon: Gauge },
+  { label: "GIS Map", icon: Map },
+  { label: "Leaderboard", icon: Trophy },
+  { label: "Mine Profile & Rules", icon: Sparkles },
   { label: "Mines", icon: Mountain },
   { label: "Inspections", icon: ClipboardCheck },
   { label: "Compliance", icon: ShieldCheck },
   { label: "Risk Intelligence", icon: BrainCircuit },
-  { label: "GIS Map", icon: Map },
+  { label: "Contractors", icon: Users },
+  { label: "Attendance", icon: UserCheck },
+  { label: "Grievances", icon: MessageSquare },
   { label: "Documents", icon: Files },
   { label: "Incidents", icon: AlertTriangle },
   { label: "Reports", icon: FileBarChart },
@@ -269,6 +292,7 @@ const quickActionMap: Record<string, string> = {
 };
 
 function CoalGuardDashboard() {
+  const { user, language, setLanguage } = useAppStore();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [range, setRange] = useState("Today");
@@ -397,25 +421,27 @@ function CoalGuardDashboard() {
                 </div>
               </div>
 
-              <div className="dashboard-search flex h-10 flex-1 items-center gap-2.5 rounded-lg border bg-card px-3.5 shadow-xs max-w-2xl lg:max-w-3xl mx-auto">
-                <Search className="size-4 text-emerald-600 shrink-0" />
-                <input
-                  aria-label="Global search"
-                  placeholder="Search mine, inspection, incident, document or compliance requirement..."
-                  className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-                />
-              </div>
+              <div className="flex flex-wrap items-center gap-3 shrink-0">
+                <div className="dashboard-search flex h-10 w-72 sm:w-80 items-center gap-2.5 rounded-lg border bg-card px-3.5 shadow-xs shrink-0">
+                  <Search className="size-4 text-emerald-600 shrink-0" />
+                  <input
+                    aria-label="Global search"
+                    placeholder="Search mine, inspection, incident..."
+                    className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                  />
+                </div>
 
-              <div className="flex items-center gap-3 shrink-0">
+                <ScopeSwitcher />
+
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="h-10 gap-2 px-3 cursor-pointer">
-                      <UserCircle className="size-5 text-emerald-600" />
+                    <Button variant="outline" className="h-10 gap-2 px-3 cursor-pointer bg-card shrink-0">
+                      <UserCircle className="size-5 text-emerald-600 shrink-0" />
                       <div className="hidden text-left sm:block">
-                        <p className="text-xs font-semibold leading-none">Admin</p>
-                        <p className="mt-1 text-[10px] text-muted-foreground">Ministry / Organization</p>
+                        <p className="text-xs font-semibold leading-none">{user.name}</p>
+                        <p className="mt-1 text-[10px] text-muted-foreground">{user.orgUnit}</p>
                       </div>
-                      <ChevronDown className="size-3 text-muted-foreground" />
+                      <ChevronDown className="size-3 text-muted-foreground shrink-0" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
@@ -446,6 +472,11 @@ function CoalGuardDashboard() {
             {activeTab === "Compliance" && <ComplianceView />}
             {activeTab === "Risk Intelligence" && <RiskIntelligenceView />}
             {activeTab === "GIS Map" && <GISMapView />}
+            {activeTab === "Mine Profile & Rules" && <RuleStudioView />}
+            {activeTab === "Contractors" && <ContractorsView />}
+            {activeTab === "Attendance" && <AttendanceView />}
+            {activeTab === "Grievances" && <GrievancesView />}
+            {activeTab === "Leaderboard" && <LeaderboardView />}
             {activeTab === "Documents" && <DocumentsView />}
             {activeTab === "Incidents" && <IncidentsView />}
             {activeTab === "Reports" && <ReportsView />}
@@ -959,6 +990,7 @@ function CoalGuardDashboard() {
               </>
             )}
           </section>
+          <AskNetraFloating />
         </div>
       </div>
     </main>
