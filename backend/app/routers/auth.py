@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -8,7 +9,7 @@ from app.constants import OrgType
 from app.db import get_db
 from app.models import OrgUnit, User
 from app.schemas import LoginRequest, TokenResponse, UserOut
-from app.security import create_access_token, verify_password
+from app.security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -49,3 +50,35 @@ def token(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return to_user_out(db, user)
+
+
+class ProfileUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    language: str | None = Field(default=None, pattern=r"^(en|hi|bn|or)$")
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+@router.patch("/me", response_model=UserOut)
+def update_me(body: ProfileUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Change your own display name or app language (en / hi / bn / or)."""
+    for field, value in body.model_dump(exclude_unset=True).items():
+        if value is not None:
+            setattr(user, field, value.strip() if field == "name" else value)
+    db.commit()
+    return to_user_out(db, user)
+
+
+@router.post("/change-password")
+def change_password(body: PasswordChange, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Change your password (needs the current one). Use it after logging in with a temporary password."""
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The current password is wrong.")
+    if body.new_password == body.current_password:
+        raise HTTPException(status_code=422, detail="The new password must be different.")
+    user.password_hash = hash_password(body.new_password)
+    db.commit()
+    return {"changed": True}

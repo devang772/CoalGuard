@@ -103,20 +103,20 @@ def phash_distance(a: str | None, b: str | None) -> int | None:
 
 
 def parse_client_time(value: str | None) -> datetime | None:
-    """ISO time from the phone -> naive UTC. A time without timezone is taken as UTC."""
+    """ISO time from the phone -> aware UTC. A time without timezone is taken as UTC."""
     if not value:
         return None
     moment = datetime.fromisoformat(value.strip())
-    if moment.tzinfo is not None:
-        moment = moment.astimezone(timezone.utc).replace(tzinfo=None)
-    return moment
+    if moment.tzinfo is None:
+        return moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(timezone.utc)
 
 
 def _exif_time_utc(exif: dict) -> datetime | None:
     """Camera time is local phone time; phones in the mines run on IST."""
     raw = exif.get("datetime_original")
     try:
-        return datetime.strptime(raw, "%Y:%m:%d %H:%M:%S") - IST_OFFSET if raw else None
+        return (datetime.strptime(raw, "%Y:%m:%d %H:%M:%S").replace(tzinfo=timezone.utc) - IST_OFFSET) if raw else None
     except ValueError:
         return None
 

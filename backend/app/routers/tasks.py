@@ -12,6 +12,7 @@ from app.db import get_db
 from app.deps import Pagination, get_mine_in_scope, resolve_mine_filter
 from app.models import ComplianceTask, Evidence, Obligation, OrgUnit, User
 from app.schemas import GenerateResult, Page, TaskComplete, TaskOut, TaskSummary
+from app.services.evidence import evidence_brief
 from app.services.tasks import generate_tasks, mark_overdue
 from app.utils import ist_day_start_utc, today_ist, utcnow
 
@@ -30,13 +31,14 @@ def _base_query():
             .outerjoin(DoneBy, DoneBy.id == ComplianceTask.done_by))
 
 
-def _to_out(task: ComplianceTask, ob: Obligation, mine_name: str, done_by_name: str | None, today: date) -> dict:
+def _to_out(db: Session, task: ComplianceTask, ob: Obligation, mine_name: str, done_by_name: str | None,
+            today: date) -> dict:
     days_overdue = (today - task.due_date).days if task.status != "done" and task.due_date < today else 0
     return {
         "id": task.id, "mine_id": task.mine_id, "mine_name": mine_name, "due_date": task.due_date,
         "status": task.status, "escalation_level": task.escalation_level, "days_overdue": days_overdue,
         "done_by": task.done_by, "done_by_name": done_by_name, "done_at": task.done_at, "remarks": task.remarks,
-        "evidence_id": task.evidence_id,
+        "evidence_id": task.evidence_id, "evidence": evidence_brief(db, task.evidence_id),
         "obligation": {"id": ob.id, "code": ob.code, "title": ob.title, "law_ref": ob.law_ref,
                        "category": ob.category, "frequency": ob.frequency, "severity": ob.severity,
                        "evidence_needed": ob.evidence_needed},
@@ -82,7 +84,7 @@ def list_tasks(org_id: int | None = None, mine_id: int | None = None,
     order = case((ComplianceTask.status == "overdue", 0), (ComplianceTask.status == "pending", 1), else_=2)
     rows = db.execute(query.order_by(order, ComplianceTask.due_date, ComplianceTask.id)
                       .offset(paging.offset).limit(paging.page_size)).all()
-    return {"items": [_to_out(*row, today) for row in rows], "total": total,
+    return {"items": [_to_out(db, *row, today) for row in rows], "total": total,
             "page": paging.page, "page_size": paging.page_size}
 
 
@@ -126,7 +128,7 @@ def _load_task(db: Session, user: User, task_id: int):
 
 @router.get("/{task_id}", response_model=TaskOut)
 def get_task(task_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return _to_out(*_load_task(db, user, task_id), today_ist())
+    return _to_out(db, *_load_task(db, user, task_id), today_ist())
 
 
 @router.post("/{task_id}/complete", response_model=TaskOut)
@@ -136,7 +138,7 @@ def complete_task(task_id: int, body: TaskComplete, user: User = Depends(require
     task, *_ = _load_task(db, user, task_id)
     if task.status == "done":
         if body.client_uuid and task.client_uuid == body.client_uuid:
-            return _to_out(*_load_task(db, user, task_id), today_ist())
+            return _to_out(db, *_load_task(db, user, task_id), today_ist())
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This task is already done.")
     if body.evidence_id is not None:
         evidence = db.get(Evidence, body.evidence_id)
@@ -149,4 +151,4 @@ def complete_task(task_id: int, body: TaskComplete, user: User = Depends(require
     task.evidence_id = body.evidence_id
     task.client_uuid = body.client_uuid
     db.commit()
-    return _to_out(*_load_task(db, user, task_id), today_ist())
+    return _to_out(db, *_load_task(db, user, task_id), today_ist())

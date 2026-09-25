@@ -18,6 +18,19 @@ class Page(BaseModel, Generic[T]):
     page_size: int
 
 
+# ---------------------------------------------------------------- shared
+
+class EvidenceBrief(BaseModel):
+    id: int
+    url: str
+    lat: float | None
+    lng: float | None
+    device_time: datetime | None
+    trust_score: int | None
+    trust_level: str | None
+    flags: list[str]
+
+
 # ---------------------------------------------------------------- auth
 
 class LoginRequest(BaseModel):
@@ -162,6 +175,7 @@ class ObligationOut(ORMModel):
     evidence_needed: str
     source: str
     source_text: str | None = None
+    due_rule: dict | None = None      # date-based due date, e.g. {"field": "cto_valid_till", "days_before": 90}
 
 
 class MineObligationOut(BaseModel):
@@ -214,6 +228,7 @@ class TaskOut(BaseModel):
     done_at: datetime | None
     remarks: str | None
     evidence_id: int | None
+    evidence: EvidenceBrief | None = None            # signed image link + trust score of the proof photo
     obligation: TaskObligation
 
 
@@ -310,6 +325,7 @@ class FindingOut(ORMModel):
     lat: float | None
     lng: float | None
     photo_evidence_id: int | None
+    photo: EvidenceBrief | None = None                # signed image link + trust score
     checklist_item_id: str | None
     created_at: datetime
     capa_id: int | None = None
@@ -379,17 +395,6 @@ class ApprovalOut(ORMModel):
     remark: str | None
     hash: str
     created_at: datetime
-
-
-class EvidenceBrief(BaseModel):
-    id: int
-    url: str
-    lat: float | None
-    lng: float | None
-    device_time: datetime | None
-    trust_score: int | None
-    trust_level: str | None
-    flags: list[str]
 
 
 class CapaDetail(CapaOut):
@@ -560,6 +565,7 @@ class AttendanceOut(BaseModel):
     gate_entry: bool
     source: str
     selfie_evidence_id: int | None
+    selfie: EvidenceBrief | None = None
 
 
 class AttendanceResult(AttendanceOut):

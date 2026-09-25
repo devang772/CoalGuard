@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, scope_mine_ids
+from app.constants import Role
 from app.config import settings
 from app.db import get_db
 from app.deps import get_mine_in_scope
@@ -17,6 +18,9 @@ from app.services.proof import InvalidImage, assess, parse_client_time, read_ima
 from app.utils import utcnow
 
 router = APIRouter(prefix="/evidence", tags=["Evidence (Satya Proof)"])
+# Workers and contractor admins see other people's photos only through signed links inside responses they
+# are allowed to see (e.g. their own reports); they cannot browse photos by id.
+OWN_PHOTOS_ONLY = (Role.WORKER, Role.CONTRACTOR_ADMIN)
 optional_token = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
 
 
@@ -26,6 +30,8 @@ def _load(db: Session, user: User, evidence_id: int) -> Evidence:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence not found.")
     if evidence.mine_id is not None:
         get_mine_in_scope(db, user, evidence.mine_id)
+    if user.role in OWN_PHOTOS_ONLY and evidence.uploaded_by != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can open only photos you uploaded.")
     return evidence
 
 
@@ -96,7 +102,8 @@ def list_evidence(ids: str = Query(..., description="comma-separated ids, e.g. 1
         raise HTTPException(status_code=422, detail="ids must be numbers separated by commas")
     allowed = set(scope_mine_ids(db, user))
     rows = db.scalars(select(Evidence).where(Evidence.id.in_(wanted)))
-    return [evidence_out(db, e) for e in rows if e.mine_id is None or e.mine_id in allowed]
+    return [evidence_out(db, e) for e in rows if (e.mine_id is None or e.mine_id in allowed)
+            and (user.role not in OWN_PHOTOS_ONLY or e.uploaded_by == user.id)]
 
 
 @router.get("/{evidence_id}")

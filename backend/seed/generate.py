@@ -25,7 +25,7 @@ import math
 import random
 import string
 from collections import defaultdict, deque
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy import delete, func, insert, select, text
 from sqlalchemy.orm import Session
@@ -44,15 +44,17 @@ from app.services.audit import append_entries
 from app.utils import utcnow
 from seed import sample_data as S
 from seed.bootstrap import bootstrap
+from seed.reference import ensure_reference_data
 
 IST = timedelta(hours=5, minutes=30)
 MONSOON = (7, 8, 9)
 SEVERITIES = ["low", "medium", "high", "critical"]
 
 # Child tables first so foreign keys are never broken while deleting.
+# (reference data - obligation catalogue, checklists, escalation rules - is kept; see seed.reference)
 ACTIVITY_TABLES = [Notification, Approval, AuditLog, ReportLog, Attendance, Worker, Contractor, Grievance,
                    Observation, Capa, Finding, Inspection, ComplianceTask, MineObligation, MineProfile,
-                   Obligation, Checklist, Evidence, ProductionLog, EnvReading]
+                   Evidence, ProductionLog, EnvReading]
 
 GHOST_CONTRACTOR = "Maa Tara Mining Works"
 SHARED_DEVICE = "DEV-SHARED-7F3A"
@@ -62,13 +64,16 @@ class Generator:
     def __init__(self, db: Session, days: int, seed: int):
         self.db = db
         self.days = days
-        self.rng = random.Random(seed)
+        self.seed = seed
+        self.use_stream("setup")
         self.now = utcnow()
         self.today = (self.now + IST).date()           # "today" in India
         self.start = self.today - timedelta(days=days - 1)
         self.counts: dict[str, int] = defaultdict(int)
 
-        self.mines = list(db.scalars(select(OrgUnit).where(OrgUnit.type == OrgType.MINE).order_by(OrgUnit.id)))
+        # only the 12 sample mines (mines added by admins are real and are never given sample activity)
+        self.mines = list(db.scalars(select(OrgUnit).where(OrgUnit.type == OrgType.MINE,
+                                                          OrgUnit.name.in_(list(S.MINE_PROFILES))).order_by(OrgUnit.id)))
         self.mine_by_name = {m.name: m for m in self.mines}
         self.sla_hours = {r.severity: r.sla_hours for r in db.scalars(select(EscalationRule))}
         self.people: dict[tuple[int, str], int] = {}
@@ -100,7 +105,7 @@ class Generator:
 
     def at(self, day: date, hour: float) -> datetime:
         """Local (IST) day + hour -> stored UTC datetime."""
-        return datetime.combine(day, time()) + timedelta(hours=hour) - IST
+        return datetime.combine(day, time(), tzinfo=timezone.utc) + timedelta(hours=hour) - IST
 
     def point_in(self, mine: OrgUnit) -> tuple[float, float]:
         angle, r = self.rng.uniform(0, 2 * math.pi), self.rng.uniform(0, 0.005)
@@ -155,23 +160,22 @@ class Generator:
 
     # ------------------------------------------------------------------ steps
     def rules_and_profiles(self) -> dict[int, list[Obligation]]:
-        catalogue = []
-        for code, title, law_ref, category, frequency, severity, evidence_needed, applies_when in S.OBLIGATIONS:
-            catalogue.append(dict(
-                id=self.new_id("obligations"), code=code, source="catalogue", applies_when=applies_when,
-                title=title, law_ref=law_ref, category=category, frequency=frequency, severity=severity,
-                evidence_needed=evidence_needed, status="approved", created_by_ai=False,
-                source_text=f"{law_ref}: {title}.", source_document="Sample obligation catalogue",
-                approved_at=self.now, created_at=self.now))
-        self.bulk(Obligation, catalogue)
+        # the catalogue itself is reference data (seed.reference), installed before the generator runs
+        catalogue = [{"id": o.id, "code": o.code, "applies_when": o.applies_when, "frequency": o.frequency,
+                      "due_rule": o.due_rule}
+                     for o in self.db.scalars(select(Obligation).where(Obligation.source == "catalogue",
+                                                                       Obligation.status == "approved")
+                                              .order_by(Obligation.id))]
 
         profiles, links = [], []
         active: dict[int, list[dict]] = defaultdict(list)
+        self.profile_values: dict[int, dict] = {}
         for mine in self.mines:
             p = dict(S.MINE_PROFILES[mine.name])
             p.update(ec_number=f"J-11015/{100 + mine.id}/2019-IA.II(M)",
                      cto_valid_till=self.today + timedelta(days=self.rng.randint(40, 700)))
             profiles.append(dict(mine_id=mine.id, updated_by=self.person(mine, Role.MINE_MANAGER), **p))
+            self.profile_values[mine.id] = p
             for ob in catalogue:
                 applies, reason = evaluate(ob["applies_when"], p)
                 if applies:
@@ -212,7 +216,10 @@ class Generator:
         for mine in self.mines:
             officer = self.person(mine, Role.SAFETY_OFFICER)
             for ob in active[mine.id]:
-                for due in self.due_dates(ob["frequency"]):
+                rule = ob["due_rule"]
+                dues = ([self.profile_values[mine.id][rule["field"]] - timedelta(days=rule["days_before"])]
+                        if rule else self.due_dates(ob["frequency"]))
+                for due in dues:
                     row = dict(obligation_id=ob["id"], mine_id=mine.id, due_date=due, status="pending",
                                escalation_level=0, done_by=None, done_at=None,
                                created_at=self.at(due - timedelta(days=7), 0))
@@ -233,15 +240,8 @@ class Generator:
         self.bulk(ComplianceTask, rows)
 
     def checklists(self) -> dict[str, int]:
-        ids = {}
-        rows = []
-        for name, mine_type, items in S.CHECKLISTS:
-            cid = self.new_id("checklists")
-            ids[mine_type or "ANY"] = cid
-            rows.append(dict(id=cid, name=name, mine_type=mine_type,
-                             items=[{"id": i, "text": t, "category": c} for i, t, c in items], created_at=self.now))
-        self.bulk(Checklist, rows)
-        return ids
+        """Checklist ids by mine type (the checklists are reference data, see seed.reference)."""
+        return {(c.mine_type or "ANY"): c.id for c in self.db.scalars(select(Checklist).order_by(Checklist.id))}
 
     def inspections(self, checklist_ids: dict[str, int]) -> None:
         insp_rows, finding_rows, capa_rows, approval_rows = [], [], [], []
@@ -573,21 +573,42 @@ class Generator:
         self.bulk(Notification, [r for r in rows if r["user_id"]])
 
     # ------------------------------------------------------------------ run
+    def use_stream(self, name: str) -> None:
+        """Each part of the generator has its own random stream, so changing one part (e.g. adding rules to the
+        catalogue) doesn't reshuffle the data of the other parts."""
+        self.rng = random.Random(f"{self.seed}:{name}")
+
     def run(self) -> dict[str, int]:
+        self.use_stream("profiles")
         active = self.rules_and_profiles()
+        self.use_stream("tasks")
         self.tasks(active)
+        self.use_stream("inspections")
         self.inspections(self.checklists())
-        self.observations()
-        self.workforce()
-        self.operations()
-        self.grievances()
+        for name, step in (("observations", self.observations), ("workforce", self.workforce),
+                           ("operations", self.operations), ("grievances", self.grievances)):
+            self.use_stream(name)
+            step()
         self.db.flush()
+        self.use_stream("notifications")
         self.notifications()
+        self.contractor_scores()
         return dict(self.counts)
+
+    def contractor_scores(self) -> None:
+        """Store the real rule-based score (same as the nightly job) instead of a random number."""
+        from app.services.fraud import contractor_alerts, contractor_score
+        ids = list(self.db.scalars(select(Contractor.id)))
+        alerts = contractor_alerts(self.db, ids, today=self.today)
+        conn = self.db.connection()
+        for cid in ids:
+            conn.execute(Contractor.__table__.update().where(Contractor.__table__.c.id == cid)
+                         .values(score=contractor_score(alerts[cid])))
 
 
 def has_activity(db: Session) -> bool:
-    return (db.scalar(select(func.count()).select_from(Obligation)) or 0) > 0
+    return any((db.scalar(select(func.count()).select_from(model)) or 0) > 0
+               for model in (ComplianceTask, Inspection, Attendance, MineProfile))
 
 
 def reset_activity(db: Session) -> None:
@@ -609,6 +630,7 @@ def generate(db: Session, days: int = 180, reset: bool = False, seed: int = 42) 
     if days < 14:
         raise ValueError("Use at least 14 days.")
     bootstrap(db)
+    ensure_reference_data(db)
     if has_activity(db):
         if not reset:
             raise RuntimeError("Activity data already exists. Run with --reset to replace it.")

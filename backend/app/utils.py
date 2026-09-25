@@ -4,8 +4,8 @@ IST_OFFSET = timedelta(hours=5, minutes=30)
 
 
 def utcnow() -> datetime:
-    """Current UTC time without tzinfo (how all timestamps are stored)."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    """Current time, timezone-aware UTC (the database stores UTC; see app.db.UTCDateTime)."""
+    return datetime.now(timezone.utc)
 
 
 def today_ist() -> date:
@@ -14,10 +14,10 @@ def today_ist() -> date:
 
 
 def ist_date(moment: datetime) -> date:
-    """Indian calendar day of a stored (UTC) timestamp."""
+    """Indian calendar day of a UTC timestamp."""
     return (moment + IST_OFFSET).date()
 
 
 def ist_day_start_utc(day: date) -> datetime:
-    """The stored-UTC timestamp at which an Indian calendar day begins."""
-    return datetime.combine(day, datetime.min.time()) - IST_OFFSET
+    """The UTC moment at which an Indian calendar day begins."""
+    return datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc) - IST_OFFSET

@@ -47,7 +47,8 @@ def test_evaluate_rules():
 # ---------------------------------------------------------------- generated data
 
 def test_counts(seeded):
-    assert seeded["obligations"] == len(S.OBLIGATIONS)
+    with SessionLocal() as db:           # the catalogue is reference data, installed before the generator runs
+        assert db.scalar(select(func.count()).select_from(Obligation).where(Obligation.source == "catalogue"))             == len(S.OBLIGATIONS)
     assert seeded["mine_profiles"] == 12
     for table in ("compliance_tasks", "inspections", "findings", "observations", "contractors",
                   "workers", "attendance", "production_logs", "env_readings", "grievances"):

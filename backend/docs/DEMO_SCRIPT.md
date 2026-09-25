@@ -25,11 +25,11 @@ with the live notification bell visible. Keep a phone logged in as **Worker** (`
 
 ## 1. The big picture (40 s): "one screen for all of Coal India"
 **CIL Admin → Command Dashboard** (`GET /dashboard/summary`)
-- 8 KPI cards compared with the previous 30 days: compliance ~77%, overdue tasks, open CAPAs by age, incidents,
-  near-misses, photo trust ~86, workers present today, refused attendance.
+- 8 KPI cards compared with the previous 30 days: compliance ~76%, overdue tasks, open CAPAs by age, incidents,
+  near-misses, photo trust ~88, workers present today, refused attendance.
 - **Top risky mine: Kusunda OCP (100%)**, reason "Overdue CAPAs".
-- Incidents chart: **monsoon rise** (Apr–Jun ≈ 0–2 per month → Jul–Sep ≈ 3–10).
-- **Leaderboard** (`GET /dashboard/leaderboard`): Kusunda OCP last (~26/100); by subsidiary MCL > CCL > BCCL.
+- Incidents chart: **monsoon rise** (Apr–Jun ≈ 0–1 per month → Jul–Sep ≈ 5–6).
+- **Leaderboard** (`GET /dashboard/leaderboard`): Kusunda OCP last (~33/100); by subsidiary BCCL is last (CCL ≈ MCL > BCCL).
 > Say: "Every number is scoped. A mine manager sees one mine, a GM their area, DGMS their region."
 
 ## 2. Laws → tasks, automatically (40 s)
@@ -59,7 +59,7 @@ with the live notification bell visible. Keep a phone logged in as **Worker** (`
 ## 5. Ghost workers and labour compliance (40 s)
 **Contractors** (`GET /contractors`): **Maa Tara Mining Works, score 3/100**. Open it (`GET /contractors/{id}`):
 - "**17 workers use the same phone** (DEV-SHARED-7F3A). One person may be marking attendance for others."
-- "Wages of 2 workers go to the same bank account" · "290 attendance records without gate entry" ·
+- "Wages of 2 workers go to the same bank account" · "298 attendance records without gate entry" ·
   "Attendance jumped … usual ~34, possible ghost shift" · "3 workers paid below the minimum wage (₹310/day)".
 - Worker attendance from 2 km away → **refused**: "You are 2.2 km outside Moonidih UG."
 > Say: "Proxy attendance and wage fraud are caught by simple, explainable rules."

@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
-from app.models import ComplianceTask, MineObligation, Obligation
+from app.models import ComplianceTask, MineObligation, MineProfile, Obligation
 from app.utils import ist_date, today_ist
 
 DAILY_AHEAD_DAYS = 2        # daily tasks are created for today + next 2 days
@@ -38,28 +38,66 @@ def upcoming_due_dates(frequency: str, today: date) -> list[date]:
     raise ValueError(f"Unknown frequency: {frequency}")
 
 
+# Profile date fields a date-based obligation may use (due = that date - days_before)
+DATE_FIELDS = {"cto_valid_till"}
+
+
+def dated_due(profile, due_rule: dict) -> date | None:
+    """Due date of a date-based obligation, e.g. {"field": "cto_valid_till", "days_before": 90}."""
+    if profile is None or due_rule.get("field") not in DATE_FIELDS:
+        return None
+    value = getattr(profile, due_rule["field"], None)
+    return value - timedelta(days=int(due_rule.get("days_before", 0))) if value else None
+
+
 def generate_tasks(db: Session, mine_ids: list[int] | None = None, today: date | None = None) -> int:
-    """Create the current-period tasks for every active mine obligation. Safe to run many times."""
+    """Create the current-period tasks for every active mine obligation. Safe to run many times.
+
+    Repeating obligations use upcoming_due_dates(frequency). Date-based obligations (with a due_rule) get ONE task
+    due from a date in the mine profile (e.g. 90 days before the Consent to Operate expires); when that date
+    changes, the old unfinished task is replaced."""
     today = today or today_ist()
-    query = (select(MineObligation.mine_id, MineObligation.obligation_id, Obligation.frequency)
+    if mine_ids is not None and not mine_ids:
+        return 0
+    query = (select(MineObligation.mine_id, MineObligation.obligation_id, Obligation.frequency, Obligation.due_rule)
              .join(Obligation, Obligation.id == MineObligation.obligation_id)
              .where(MineObligation.status == "active"))
     if mine_ids is not None:
-        if not mine_ids:
-            return 0
         query = query.where(MineObligation.mine_id.in_(mine_ids))
-    wanted = {(mine_id, obligation_id, due)
-              for mine_id, obligation_id, frequency in db.execute(query)
-              for due in upcoming_due_dates(frequency, today)}
+    rows = db.execute(query).all()
+    profiles = {}
+    if any(rule for *_, rule in rows):
+        profiles = {p.mine_id: p for p in db.scalars(select(MineProfile).where(
+            MineProfile.mine_id.in_({mine_id for mine_id, *_ in rows})))}
+
+    wanted: set[tuple[int, int, date]] = set()
+    dated: dict[tuple[int, int], date] = {}
+    for mine_id, obligation_id, frequency, rule in rows:
+        if rule:
+            due = dated_due(profiles.get(mine_id), rule)
+            if due is not None:
+                dated[(mine_id, obligation_id)] = due
+                wanted.add((mine_id, obligation_id, due))
+        else:
+            wanted.update((mine_id, obligation_id, due) for due in upcoming_due_dates(frequency, today))
     if not wanted:
         return 0
-    existing_query = select(ComplianceTask.mine_id, ComplianceTask.obligation_id, ComplianceTask.due_date).where(
-        ComplianceTask.due_date >= today)
+
+    existing_query = select(ComplianceTask).where(
+        (ComplianceTask.due_date >= today)
+        | ComplianceTask.obligation_id.in_({ob for _, ob in dated} or {-1}))
     if mine_ids is not None:
         existing_query = existing_query.where(ComplianceTask.mine_id.in_(mine_ids))
-    missing = wanted - set(db.execute(existing_query).tuples())
+    existing = list(db.scalars(existing_query))
+    have = {(t.mine_id, t.obligation_id, t.due_date) for t in existing}
+    for task in existing:                    # a date-based task whose date moved: replace the unfinished old one
+        key = (task.mine_id, task.obligation_id)
+        if key in dated and task.due_date != dated[key] and task.status != "done":
+            db.delete(task)
+    missing = wanted - have
     for mine_id, obligation_id, due in sorted(missing):
-        db.add(ComplianceTask(mine_id=mine_id, obligation_id=obligation_id, due_date=due, status="pending"))
+        db.add(ComplianceTask(mine_id=mine_id, obligation_id=obligation_id, due_date=due,
+                              status="overdue" if due < today else "pending"))
     db.flush()
     return len(missing)
 

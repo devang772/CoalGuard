@@ -12,6 +12,7 @@ from app.deps import Pagination, check_evidence
 from app.models import Attendance, Contractor, Evidence, OrgUnit, User, Worker
 from app.routers.contractors import VIEWERS, visible_contractors_query
 from app.schemas import AttendanceMark, AttendanceOut, AttendanceResult, Page
+from app.services.evidence import evidence_brief
 from app.services.workforce import attendance_checks, local_time_text, todays_valid_record
 from app.utils import ist_day_start_utc, today_ist, utcnow
 
@@ -35,7 +36,8 @@ def _rows(db: Session, records: list[Attendance]) -> list[dict]:
                     "contractor_name": contractors.get(w.contractor_id) if w else None,
                     "mine_id": r.mine_id, "mine_name": mines.get(r.mine_id, ""), "time": r.time, "lat": r.lat,
                     "lng": r.lng, "valid": r.valid, "reason": r.reason, "gate_entry": r.gate_entry,
-                    "source": r.source, "selfie_evidence_id": r.selfie_evidence_id})
+                    "source": r.source, "selfie_evidence_id": r.selfie_evidence_id,
+                    "selfie": evidence_brief(db, r.selfie_evidence_id)})
     return out
 
 

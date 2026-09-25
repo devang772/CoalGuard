@@ -2,15 +2,16 @@
 
 Every table is defined here up front (even for features built in later modules) so that
 the frontend and ML teammates can rely on the final table and column names.
-All timestamps are stored in UTC without timezone info (see app.utils.utcnow).
+All timestamps are stored in UTC; Python always sees timezone-aware UTC datetimes (see app.db.UTCDateTime).
 """
 from datetime import date, datetime
 
-from sqlalchemy import (JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer,
+from sqlalchemy import (JSON, Boolean, Date, Float, ForeignKey, Integer,
                         String, Text, UniqueConstraint)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
+from app.db import UTCDateTime as DateTime
 from app.utils import utcnow
 
 
@@ -89,6 +90,8 @@ class Obligation(TimestampMixin, Base):
     code: Mapped[str | None] = mapped_column(String(40), unique=True)    # stable id, e.g. SAF-ROOF-D
     source: Mapped[str] = mapped_column(String(15), default="manual")    # ml_engine / catalogue / manual
     applies_when: Mapped[dict | None] = mapped_column(JSON)              # fallback matching condition
+    # Date-based due date instead of a repeating one, e.g. {"field": "cto_valid_till", "days_before": 90}
+    due_rule: Mapped[dict | None] = mapped_column(JSON)
     title: Mapped[str] = mapped_column(String(300))
     law_ref: Mapped[str] = mapped_column(String(200), default="Not specified")
     category: Mapped[str] = mapped_column(String(20), index=True)        # constants.Category

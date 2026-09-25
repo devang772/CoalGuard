@@ -12,8 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.constants import Role
-from app.models import Capa, ComplianceTask, EscalationRule, Finding, Grievance, Obligation, Observation, OrgUnit
+from app.models import (Capa, ComplianceTask, Contractor, EscalationRule, Finding, Grievance, Obligation,
+                        Observation, OrgUnit)
 from app.services.clock import effective_now
+from app.services.fraud import contractor_alerts, contractor_score
 from app.services.notify import notify, people_for_mine
 from app.services.tasks import generate_tasks, mark_overdue
 from app.utils import IST_OFFSET, today_ist, utcnow
@@ -43,11 +45,27 @@ def _mine_names(db: Session) -> dict[int, str]:
 
 # ---------------------------------------------------------------- nightly
 
+def refresh_contractor_scores(db: Session) -> int:
+    """Store each contractor's current score (the API computes it live; this keeps contractors.score
+    correct for reports, SQL and the ML teammate). Only changed scores are written."""
+    contractors = list(db.scalars(select(Contractor)))
+    alerts = contractor_alerts(db, [c.id for c in contractors])
+    changed = 0
+    for c in contractors:
+        score = contractor_score(alerts[c.id])
+        if c.score != score:
+            c.score = score
+            changed += 1
+    db.flush()
+    return changed
+
+
 def nightly(db: Session, today: date | None = None) -> dict:
-    """Create this period's tasks and mark late ones overdue."""
+    """Create this period's tasks, mark late ones overdue, refresh contractor scores."""
     created = generate_tasks(db, today=today)
     overdue = mark_overdue(db, today=today)
-    return {"tasks_created": created, "tasks_marked_overdue": overdue}
+    return {"tasks_created": created, "tasks_marked_overdue": overdue,
+            "contractor_scores_updated": refresh_contractor_scores(db)}
 
 
 # ---------------------------------------------------------------- reminders

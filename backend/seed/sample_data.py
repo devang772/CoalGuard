@@ -10,6 +10,7 @@ UG = ["UG", "MIXED"]
 OC = ["OC", "MIXED"]
 
 # (code, title, law_ref, category, frequency, severity, evidence_needed, applies_when)
+# Every one of the 15 mine-profile fields is used by at least one rule below.
 OBLIGATIONS = [
     # ---- safety
     ("SAF-FIRSTAID-W", "Check first-aid boxes and stretchers in every section", "Mines Act 1952 / Mines Rules 1955 (first aid)",
@@ -48,6 +49,13 @@ OBLIGATIONS = [
      "safety", "monthly", "high", "Training status report", None),
     ("SAF-DRILL-Q", "Conduct a mock rescue and evacuation drill", "CMR 2017 (emergency plan)",
      "safety", "quarterly", "high", "Drill report with photos", {"working_method": UG}),
+    ("SAF-STRATA-W", "Record strata / convergence monitoring readings in deep workings", "CMR 2017 (strata control)",
+     "safety", "weekly", "high", "Convergence readings", {"working_method": UG, "depth_m": {"min": 300}}),
+    ("SAF-HEAT-W", "Measure temperature and humidity at working faces (heat stress)",
+     "CMR 2017 (environmental conditions below ground)", "safety", "weekly", "medium", "Readings per face",
+     {"working_method": UG, "depth_m": {"min": 300}}),
+    ("SAF-SLOPE-M", "Monitor pit slope stability (survey prisms, crack mapping)", "CMR 2017 (slope stability)",
+     "safety", "monthly", "high", "Slope monitoring report", {"working_method": OC, "depth_m": {"min": 100}}),
     # ---- environment
     ("ENV-AIR-M", "Monitor ambient air quality (PM10, PM2.5) and record results", "EC condition (air quality monitoring)",
      "environment", "monthly", "medium", "Lab report / monitor readings", None),
@@ -65,8 +73,22 @@ OBLIGATIONS = [
      "environment", "monthly", "medium", "Photos of drains and ponds", {"near_water_body": True}),
     ("ENV-FOREST-Q", "Check compliance with forest clearance conditions", "Forest (Conservation) Act conditions",
      "environment", "quarterly", "medium", "Compliance note + photos", {"forest_land": True}),
-    ("ENV-CTO-Y", "Renew Consent to Operate before it expires", "Air Act 1981 / Water Act 1974 (CTO)",
-     "environment", "yearly", "high", "Renewal application / new CTO", None),
+    ("ENV-CTO-Y", "Apply for renewal of the Consent to Operate (90 days before it expires)",
+     "Air Act 1981 / Water Act 1974 (CTO)", "environment", "yearly", "high", "Renewal application / new CTO",
+     {"cto_valid_till": {"present": True}}),
+    ("ENV-EC-Q", "Review compliance with every Environmental Clearance condition", "EC conditions (EC letter on file)",
+     "environment", "quarterly", "medium", "Condition-wise compliance sheet", {"ec_number": {"present": True}}),
+    ("ENV-CAAQMS-W", "Check the continuous ambient air quality monitoring station is working and reporting",
+     "EC condition (continuous air monitoring for large mines)", "environment", "weekly", "medium",
+     "Station status screenshot", {"production_capacity_mtpa": {"min": 5}}),
+    ("ENV-WASHERY-M", "Monitor washery effluent and slurry pond (zero discharge)", "EC / CTO condition (washery effluent)",
+     "environment", "monthly", "high", "Effluent test report + pond photos", {"has_washery": True}),
+    ("ENV-JSPCB-M", "Submit the monthly environmental return to the Jharkhand State Pollution Control Board",
+     "State PCB consent conditions (Jharkhand)", "environment", "monthly", "medium", "Submitted return copy",
+     {"state": ["Jharkhand"]}),
+    ("ENV-OSPCB-M", "Submit the monthly environmental return to the State Pollution Control Board, Odisha",
+     "State PCB consent conditions (Odisha)", "environment", "monthly", "medium", "Submitted return copy",
+     {"state": ["Odisha"]}),
     # ---- labour
     ("LAB-WAGE-M", "Maintain wage register and check minimum wages for contract workers", "CLRA 1970 / Minimum Wages Act",
      "labour", "monthly", "high", "Wage register (scan)", {"contract_worker_count": {"min": 1}}),
@@ -262,3 +284,7 @@ GRIEVANCES = {
     "facilities": ["No drinking water at the pit top", "Toilet near the canteen is broken", "Canteen food is stale"],
     "leave": ["Leave not sanctioned even for medical reasons"],
 }
+
+
+# Date-based rules: the task is due this many days before a date in the mine profile (not on a repeating schedule)
+DUE_RULES = {"ENV-CTO-Y": {"field": "cto_valid_till", "days_before": 90}}

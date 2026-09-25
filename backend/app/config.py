@@ -15,8 +15,11 @@ class Settings(BaseSettings):
 
     cors_origins: str = "*"
 
-    auto_bootstrap: bool = True
+    auto_bootstrap: bool = True          # demo org tree (12 sample mines) + demo logins when the database is empty
     demo_password: str = "demo123"
+    # Install the sample obligation catalogue (used when the ML engine is not available). Checklists and
+    # escalation rules are always installed if missing.
+    load_sample_catalogue: bool = True
 
     # Background jobs (reminders, escalation ladder, nightly tasks). Only ONE server process should run them.
     scheduler_enabled: bool = True

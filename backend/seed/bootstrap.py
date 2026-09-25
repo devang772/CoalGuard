@@ -1,4 +1,5 @@
-"""Starter data: org tree (12 sample mines), demo users for every role, escalation rules.
+"""Demo starter data: org tree (12 sample mines) and demo users for every role.
+(Escalation rules, checklists and the obligation catalogue are reference data: see seed.reference.)
 
 Runs automatically at startup when the database is empty (AUTO_BOOTSTRAP=true),
 or by hand:  python -m seed.bootstrap
@@ -13,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.constants import OrgType, Role
-from app.models import EscalationRule, OrgUnit, User
+from app.models import OrgUnit, User
 from app.security import hash_password
 
 # subsidiary -> area -> [(mine name, UG/OC, lat, lng)]
@@ -63,14 +64,6 @@ DEMO_USERS = [
     ("9000000009", "Birsa Hansda (Worker)", Role.WORKER, "MINE-MOONIDIH-UG"),
 ]
 
-# severity -> (hours to fix, reminder hours before due)
-ESCALATION_DEFAULTS = {
-    "critical": (24, [6]),
-    "high": (72, [24]),
-    "medium": (168, [72, 24]),
-    "low": (360, [72, 24]),
-}
-ESCALATION_LADDER = [Role.MINE_MANAGER, Role.AREA_GM, Role.SUBSIDIARY_ADMIN, Role.CIL_ADMIN]
 
 
 def mine_code(name: str) -> str:
@@ -148,10 +141,6 @@ def bootstrap(db: Session) -> bool:
             db.add(User(name=f"{label}, {unit.name}", phone=f"91{counter:08d}", role=role,
                         org_unit_id=unit.id, password_hash=password_hash, language="en"))
             counter += 1
-
-    for severity, (sla_hours, reminders) in ESCALATION_DEFAULTS.items():
-        db.add(EscalationRule(severity=severity, sla_hours=sla_hours,
-                              levels=ESCALATION_LADDER, reminder_hours=reminders))
 
     db.commit()
     return True

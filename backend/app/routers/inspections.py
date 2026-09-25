@@ -13,6 +13,7 @@ from app.models import Capa, Checklist, Finding, Inspection, OrgUnit, User
 from app.schemas import (ChecklistOut, FindingCreate, FindingOut, InspectionCreate, InspectionDetail,
                          InspectionOut, InspectionSubmit, Page)
 from app.services.capa import create_capa_for_finding
+from app.services.evidence import evidence_brief
 from app.services.notify import MANAGER_AND_GM, notify, people_for_mine
 from app.utils import ist_day_start_utc, utcnow
 
@@ -39,8 +40,9 @@ def list_checklists(mine_id: int | None = None, user: User = Depends(get_current
 
 # ---------------------------------------------------------------- helpers
 
-def _finding_out(finding: Finding, capa: Capa | None) -> dict:
+def _finding_out(db: Session, finding: Finding, capa: Capa | None) -> dict:
     data = FindingOut.model_validate(finding).model_dump()
+    data["photo"] = evidence_brief(db, finding.photo_evidence_id)
     if capa is not None:
         data.update(capa_id=capa.id, capa_status=capa.status, capa_due_at=capa.due_at)
     return data
@@ -71,7 +73,7 @@ def _detail(db: Session, inspection: Inspection) -> dict:
     findings = list(db.scalars(select(Finding).where(Finding.inspection_id == inspection.id).order_by(Finding.id)))
     capas = {c.finding_id: c for c in db.scalars(select(Capa).where(Capa.finding_id.in_([f.id for f in findings])))}
     row.update(checklist_answers=inspection.checklist_answers, notes=inspection.notes,
-               findings=[_finding_out(f, capas.get(f.id)) for f in findings])
+               findings=[_finding_out(db, f, capas.get(f.id)) for f in findings])
     return row
 
 
@@ -164,7 +166,7 @@ def add_finding(inspection_id: int, body: FindingCreate, response: Response,
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="client_uuid already used.")
             _load_inspection(db, user, inspection_id)
             response.status_code = status.HTTP_200_OK
-            return _finding_out(existing, db.scalar(select(Capa).where(Capa.finding_id == existing.id)))
+            return _finding_out(db, existing, db.scalar(select(Capa).where(Capa.finding_id == existing.id)))
     inspection = _own_open_inspection(db, user, inspection_id)
     check_evidence(db, body.photo_evidence_id, inspection.mine_id)
     now = utcnow()
@@ -183,7 +185,7 @@ def add_finding(inspection_id: int, body: FindingCreate, response: Response,
                f"Critical finding at {mine_name}", f"{finding.description} · fix within 24 h (CAPA #{capa.id})",
                level="critical", kind="finding", link=f"/capa/{capa.id}")
     db.commit()
-    return _finding_out(finding, capa)
+    return _finding_out(db, finding, capa)
 
 
 @router.post("/inspections/{inspection_id}/submit", response_model=InspectionDetail)

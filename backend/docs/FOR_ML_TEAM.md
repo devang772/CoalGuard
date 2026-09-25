@@ -49,7 +49,9 @@ from app.config import settings          # settings.min_daily_wage (450, sample)
 - `scope_mine_ids(db, user, org_id=None) -> list[int]`: **filter every query** with it.
 - `ensure_mine_access(db, user, mine_id)`: raises 403 if the mine is outside the user's area.
 - Errors: raise `HTTPException(status_code, detail="message")`; AI outage → `503`.
-- Times in the DB are **UTC without timezone**. India is UTC+5:30 (convert before "per day" grouping if
+- Times in the DB are stored as **UTC without timezone** (raw SQL / `pd.read_sql` gives naive UTC, as before).
+  Through the ORM (`db.get`, `select(Model)`) they come back **timezone-aware UTC**, and
+  `app.utils.utcnow()` is aware too, so don't mix them with naive `datetime.utcnow()`. India is UTC+5:30 (convert before "per day" grouping if
   you want Indian calendar days).
 
 ---
@@ -119,12 +121,12 @@ Output: list of dicts, one per applicable obligation:
 #### Your training data (what `seed.generate` creates, 180 days)
 | Table | Rows (seed 42) | Notes for features |
 |---|---|---|
-| `compliance_tasks` | ~4,700 | `status` pending/done/overdue, `due_date`, `done_at`, `escalation_level` 0–3. Daily tasks only for the last 30 days; weekly+ for the full window |
-| `inspections` | ~625 | ~2 per mine per week; `type` internal/statutory/dgms/spcb |
-| `findings` | ~900 | `category`, `severity`, `description`, `created_at`, lat/lng |
-| `capas` | ~900 | one per finding; `due_at`, `status`, `closed_at`, `escalation_level` |
+| `compliance_tasks` | ~5,000 | `status` pending/done/overdue, `due_date`, `done_at`, `escalation_level` 0–3. Daily tasks only for the last 30 days; weekly+ for the full window |
+| `inspections` | ~630 | ~2 per mine per week; `type` internal/statutory/dgms/spcb |
+| `findings` | ~920 | `category`, `severity`, `description`, `created_at`, lat/lng |
+| `capas` | ~920 | one per finding; `due_at`, `status`, `closed_at`, `escalation_level` |
 | `evidence` | ~1,900 | `trust_score` 20–98, `flags` list |
-| `observations` | ~330 | `type` unsafe_act/unsafe_condition/near_miss/incident/sos; ~20% `source='voice'`, `language='hi'`, Hindi `transcript` |
+| `observations` | ~370 | `type` unsafe_act/unsafe_condition/near_miss/incident/sos; ~20% `source='voice'`, `language='hi'`, Hindi `transcript` |
 | `workers` | 612 | `training_valid_till`, `medical_valid_till`, `device_id`, `bank_acc_hash`, `daily_wage` |
 | `attendance` | ~41,000 | last 90 days, Sundays off; `valid`, `reason`, `gate_entry`, `device_id` |
 | `production_logs` | 2,160 | daily `produced_t`, `dispatched_t` per mine |
@@ -140,14 +142,14 @@ warning signs; your features should be able to learn this.
 #### Planted patterns you should detect (seed 42)
 | # | Pattern | Where to look | Expected result |
 |---|---|---|---|
-| 1 | Rising risk | Kusunda OCP, last 8 weeks | Highest risk %: 13 open overdue CAPAs (others ≤2), 73 overdue tasks, ~25 warnings + 4 incidents in 8 weeks |
-| 2 | Monsoon | all mines, Jul–Sep | ~22 incidents in Jul–Sep vs ~2 in Apr–Jun; more `water`/`roof` categories |
+| 1 | Rising risk | Kusunda OCP, last 8 weeks | Highest risk %: 9 open overdue CAPAs (others ≤4), 54 overdue tasks (others ≤34), ~36 warnings + 3 incidents in 8 weeks |
+| 2 | Monsoon | all mines, Jul–Sep | ~17 incidents in Jul–Sep vs ~2 in Apr–Jun; more `water`/`roof` categories |
 | 3 | Dispatch gap | Bastacolla OCP, `production_logs` | 6 days with `dispatched_t/produced_t` ≈ 0.45–0.55 (normal 0.92–1.04) |
-| 4 | Ghost shift | Moonidih UG, contractor "Maa Tara Mining Works" | attendance 47–49 on the spike days vs ~36 normally; extra workers have `gate_entry=false` |
+| 4 | Ghost shift | Moonidih UG, contractor "Maa Tara Mining Works" | attendance 45–47 on the spike days vs ~36 normally; extra workers have `gate_entry=false` |
 | 4b | Shared identity | same contractor | 17 workers with `device_id='DEV-SHARED-7F3A'`; 2 share one `bank_acc_hash`; 3 with `daily_wage=310` (< 450) |
 | 5 | Recurring violation | `findings` with `category='haul_road'` | "spillage" 6× at Kusunda, 5× at Bastacolla, each worded differently |
 | 6 | Dust spikes | Ashoka OCP, `env_readings` | 6 days with PM10 180–260 (others < 100) |
-| 7 | Training expiry | Kusunda contractors | ~30% of workers with expired training (other mines ~5%) |
+| 7 | Training expiry | Kusunda contractors | ~19% of workers with expired training (other mines ~6%) |
 
 Tip: dates are relative to the day you run the generator (the window always ends "today").
 
@@ -208,13 +210,13 @@ Return one dict per mine:
 
 **The simple score you are replacing** (`app/services/risk.py`, so you can compare):
 `risk_pct = min(100, 4×overdue CAPAs + 0.4×overdue tasks (30 d) + 2×near-miss/unsafe reports (14 d) + 8×incidents (30 d) + 10×monsoon)`.
-With seed 42 it gives Kusunda OCP 100 (high); every other mine scores about 20–48. Your model should also put Kusunda on top.
+With seed 42 it gives Kusunda OCP 100 (high); every other mine scores about 22–55. Your model should also put Kusunda on top.
 
 #### New data details you may use
 - `mine_obligations.status` now has three values: `active`, `not_applicable` (manager decision) and `inactive`
   (no longer applies to the profile).
 - Compliance % (backend definition): tasks done on or before their due date ÷ tasks that were due, grouped by the
-  Indian calendar day (`app/services/tasks.py → compliance_stats`). With seed 42, Kusunda is ~50% and the others 73–88%.
+  Indian calendar day (`app/services/tasks.py → compliance_stats`). With seed 42, Kusunda is ~54% and the others 70–86%.
 - `today` is always the Indian date (`app.utils.today_ist()`). Use `ist_date(ts)` to convert stored UTC timestamps.
 
 ---
@@ -243,8 +245,8 @@ Findings created through the app automatically get a CAPA: owner = the mine mana
 and these rows look exactly like the seeded ones, meaning your models don't need a separate path for them.
 
 #### Data counts (seed 42, after the rebuild)
-~625 inspections, ~900 findings + CAPAs (≈56 open, 13 in review, ≈830 closed, 1 rejected; 23 overdue),
-~830 approvals, ~330 field reports. The Kusunda/monsoon/Bastacolla/ghost/spillage/PM10 patterns are unchanged,
+~630 inspections, ~920 findings + CAPAs (≈75 open, 17 in review, ≈824 closed, 1 rejected; 31 overdue),
+~820 approvals, ~370 field reports. The Kusunda/monsoon/Bastacolla/ghost/spillage/PM10 patterns are unchanged,
 and Kusunda is still the only high-risk mine with the simple score.
 
 ---
@@ -316,8 +318,8 @@ Plain rules per contractor over active workers and recent attendance:
 | `licence_expired/_expiring`, `insurance_expired/_expiring` | validity dates (expiring = within 30 days) |
 
 Score = 100 − (15 per high, 7 per medium, 3 per low alert). With seed 42: **Maa Tara Mining Works 3** (7 alerts:
-17 on one phone, 2 on one bank account, 290 no-gate records, spikes on 4 days up to 47 vs a usual ~34,
-3 workers at ₹310), Damodar Transport Co. 63, Hazaribagh Contractors 70, best is Shree Ganesh Enterprises 93.
+17 on one phone, 2 on one bank account, 298 no-gate records, spikes on 3 days up to 45 vs a usual ~34,
+3 workers at ₹310), Hazaribagh Contractors 70, Jharkhand Earthmovers 71, best 93 (Bharat Coal Handlers, Jharsuguda Infra).
 
 **Where ML can add value** (optional, your call):
 - Your **attendance anomaly** detector (plan feature 4) can be compared with `attendance_spike`. It should at least
@@ -436,5 +438,27 @@ Same rule as before: use ORM changes (not bulk statements), so the audit chain s
 
 To add your router, append **one line** each to `app/main.py`: `from app.routers import ai` and `app.include_router(ai.router)`.
 Test data: `python -m seed.generate --reset`. Contracts, shapes and planted patterns are in the sections above.
-Run the backend tests after merging: `python -m pytest -q` (119 tests; the ML-hook tests use fake modules, so they
+Run the backend tests after merging: `python -m pytest -q` (132 tests; the ML-hook tests use fake modules, so they
 keep passing with or without your code).
+
+---
+
+### Update: integration audit ✅ (please read before merging)
+1. **Your router is picked up automatically.** Put your endpoints in `app/routers/ai.py` (with `router = APIRouter(...)`).
+   The backend includes it at startup; **don't edit `app/main.py`**. If your module fails to import, the error is
+   logged and the rest of the API keeps running. The startup log says "AI router loaded".
+2. **Times:** see the note in section 3. ORM datetimes are timezone-aware UTC; raw SQL / pandas stay naive UTC.
+   Compare like with like (`pd.to_datetime(..., utc=True)` makes pandas aware).
+3. **`contractors.score` is now real.** The nightly job (and the seed) stores the same rule-based score the API shows.
+   Before, it was a random number.
+4. **All 15 profile fields feed the rule matcher** (depth, capacity, washery, EC number, CTO date and state were added;
+   the sample catalogue now has 43 rules). Your `recommend_obligations` may also return an optional
+   **`due_rule`** for date-based duties: `{"field": "cto_valid_till", "days_before": 90}` → one task due 90 days before
+   that profile date (it moves when the date changes). Supported field: `cto_valid_till`. Anything else is ignored.
+5. **The rule catalogue, checklists and escalation rules are reference data**, installed at every startup
+   (`seed/reference.py`), also on a real deployment without demo data. Your engine's obligations (`source="ml_engine"`)
+   are untouched.
+6. **Sample data is stable against changes:** each part of the generator has its own random stream, so adding rules
+   no longer reshuffles workers, attendance, etc. All counts in this file were **re-measured** after this change
+   (e.g. Kusunda: 9 open overdue CAPAs, 54 overdue tasks, compliance ~54%; monsoon 17 vs 2 incidents).
+7. The generator now only fills the 12 sample mines; real mines added by admins never get sample activity.

@@ -47,8 +47,10 @@ docker compose up -d                                        # PostgreSQL on loca
 - **Errors** always look like `{"detail": "human readable message"}`.
   - `401`: not logged in / token expired → send the user to login.
   - `403`: logged in but not allowed (wrong role, or mine outside their area) → show the message.
-  - `422`: form data invalid (FastAPI shows which field in `detail`).
-- **Times** are sent in **UTC** (ISO format, no timezone suffix, e.g. `2026-09-26T05:30:00`).
+  - `422`: invalid data. `detail` is one readable sentence (e.g. `"text: Field required"`), and `errors` lists
+    every problem: `[{"field": "body.text", "message": "Field required"}]`.
+- **Times** are sent in **UTC with the zone marked**: `2026-09-26T05:30:00Z` or `2026-09-26T05:30:00+00:00`.
+  `new Date(value)` handles both correctly; show them in IST. Plain dates (`due_date`) are `YYYY-MM-DD`.
   Convert to IST for display (add 5 h 30 min).
 - **Scope:** the backend already filters data to the user's area. Web "Scope Switcher" → send `?org_id=<id>`
   on list/dashboard calls; it can only **narrow** what the user sees, never widen it.
@@ -148,9 +150,9 @@ and the `/ai/parse-rules` upload flow for end users.
 **New fields on an obligation:** `code` (stable id like `SAF-ROOF-D`), `source` (`ml_engine | catalogue | manual`).
 
 #### What sample data now exists (after `python -m seed.generate`)
-About 180 days ending today: ~4,700 compliance tasks (done / pending / overdue with escalation level 0–3),
-~625 inspections, ~900 findings each with a CAPA (open / in_review / closed / rejected), ~1,900 photo
-evidence records with trust scores and flags, ~330 field reports (near-miss, unsafe act/condition,
+About 180 days ending today: ~5,000 compliance tasks (done / pending / overdue with escalation level 0–3),
+~630 inspections, ~920 findings each with a CAPA (open / in_review / closed / rejected), ~1,900 photo
+evidence records with trust scores and flags, ~370 field reports (near-miss, unsafe act/condition,
 incident, SOS; ~20% Hindi voice with transcript), 15 contractors, 612 workers, ~41,000 attendance rows,
 daily production/dispatch and PM10/noise per mine, 25 grievances (many anonymous), a few notifications.
 
@@ -205,10 +207,10 @@ All endpoints are live in Swagger (`/docs`) and all of them respect the user's a
   "id": 7, "name": "Kusunda OCP", "code": "MINE-KUSUNDA-OCP", "mine_type": "OC",
   "subsidiary": "BCCL", "area": "Kusunda Area", "center_lat": 23.78, "center_lng": 86.392,
   "manager_name": "Mine Manager, Kusunda OCP",
-  "compliance_pct": 50.2,
-  "overdue_tasks": 73, "open_capas": 16,
+  "compliance_pct": 54.1,
+  "overdue_tasks": 54, "open_capas": 16,
   "risk": {"risk_pct": 100.0, "level": "high", "source": "simple_score",
-           "reasons": [{"factor": "Overdue CAPAs", "value": 13, "impact_pct": 52.0}]}
+           "reasons": [{"factor": "Overdue CAPAs", "value": 9, "impact_pct": 36.0}]}
 }
 ```
   `compliance_pct` covers the last 30 days (`null` if nothing was due). `risk.source` is `simple_score` now and
@@ -280,7 +282,7 @@ All endpoints are live in Swagger (`/docs`) and all of them respect the user's a
 }
 ```
   `evidence_id` is only an id for now; photo details (URL, trust score) arrive in Module 5.
-- `GET /tasks/summary?org_id=&mine_id=` → `{"due_today": 6, "due_this_week": 33, "overdue": 23, "done_today": 7, "pending": 36}`
+- `GET /tasks/summary?org_id=&mine_id=` → `{"due_today": 6, "due_this_week": 40, "overdue": 34, "done_today": 4, "pending": 43}`
 - `GET /tasks/{id}` → one item.
 - `POST /tasks/{id}/complete` (roles: `supervisor`, `safety_officer`, `mine_manager`), body
   `{"remarks": "Checked", "evidence_id": null, "client_uuid": "uuid-from-the-phone"}`.
@@ -309,8 +311,8 @@ All endpoints are live in Swagger (`/docs`) and all of them respect the user's a
   `subtype` = the finding category or observation type; `acknowledged` is only set for SOS pins.
 
 #### Real numbers you'll see with the sample data (seed 42)
-Kusunda OCP is the only **high**-risk mine (100%, compliance ~50%). The others are low or medium (compliance 73–88%).
-Pins for the last 30 days: ~240 (3 SOS, ~180 findings, ~9 incidents, ~50 observations).
+Kusunda OCP is the only **high**-risk mine (100%, compliance ~54%). The others are low or medium (compliance 70–86%).
+Pins for the last 30 days: ~290 (3 SOS, ~195 findings, ~6 incidents, ~85 observations).
 
 ---
 
@@ -405,8 +407,8 @@ Tip: when the user taps **✗ Not OK** on an item, open Add Finding with `catego
   GM / subsidiary / CIL (the automatic escalation arrives in Module 8; seeded data already has levels).
   `closure_checks` is filled by Satya Proof in Module 5 (`[{name, passed, detail}]`).
 - `GET /capa/summary` →
-  `{"by_status": {"open": 56, "in_review": 13, "closed": 830, "rejected": 1}, "overdue": 23,
-  "open_by_severity": {"low": 28, "medium": 19, "high": 21, "critical": 2}, "open_ageing": {"lt7": 36, "d7_30": 30, "gt30": 4}}`
+  `{"by_status": {"open": 75, "in_review": 17, "closed": 824, "rejected": 1}, "overdue": 31,
+  "open_by_severity": {"low": 27, "medium": 39, "high": 22, "critical": 5}, "open_ageing": {"lt7": 57, "d7_30": 25, "gt30": 11}}`
   → Kanban column counts, "Open CAPA ageing" chart (`lt7` < 7 days, `d7_30` 7–30 days, `gt30` > 30 days).
 - `GET /capa/{id}` → the item + `approvals: [{id, approver_id, approver_name, decision, remark, hash, created_at}]`
   + `approvals_verified` (true = nobody edited the approval history; show a green shield, red if false).
@@ -424,8 +426,8 @@ Tip: when the user taps **✗ Not OK** on an item, open Add Finding with `catego
 
 #### Sample data
 Closed CAPAs in the sample data carry an approval by the **Area GM** (remark "Verified, fix accepted."), so the
-history section of CAPA detail is filled. Current totals (seed 42): 56 open, 13 in review, ~830 closed, 1 rejected,
-23 overdue.
+history section of CAPA detail is filled. Current totals (seed 42): 75 open, 17 in review, ~824 closed, 1 rejected,
+31 overdue.
 
 ---
 
@@ -571,8 +573,8 @@ Rebuild your local database and re-seed (new attendance columns).
 - `GET /contractors?org_id=&mine_id=&q=&licence_status=valid|expiring|expired` → **lowest score first**:
 ```json
 {"id": 2, "name": "Maa Tara Mining Works", "licence_no": "CLRA/MOON/2025/102",
- "licence_valid_till": "2028-04-18", "licence_status": "valid",
- "insurance_valid_till": "2027-04-20", "insurance_status": "valid",
+ "licence_valid_till": "2027-11-20", "licence_status": "valid",
+ "insurance_valid_till": "2027-06-26", "insurance_status": "valid",
  "pf_code": "JHRAN1002", "esi_code": "ESI2002", "mine_id": 4, "mine_name": "Moonidih UG", "admin_user_id": null,
  "workers_count": 52, "alerts_count": 7, "high_alerts": 6, "score": 3.0}
 ```
@@ -580,9 +582,9 @@ Rebuild your local database and re-seed (new attendance columns).
 - `GET /contractors/{id}` → the same + `stats` + `alerts`:
 ```json
 "stats": {"workers_total": 52, "workers_active": 52,
-          "training": {"valid": 50, "expired": 2}, "medical": {"valid": 49, "expired": 3},
+          "training": {"valid": 49, "expired": 3}, "medical": {"valid": 50, "expired": 2},
           "below_min_wage": 3,
-          "attendance_30d": {"valid": 928, "invalid": 60, "without_gate_entry": 290}}
+          "attendance_30d": {"valid": 940, "invalid": 38, "without_gate_entry": 298}}
 ```
   In `training` / `medical`, a missing status key means 0.
 - `GET /contractors/{id}/alerts` → the alerts list (also inside the 360):
@@ -605,11 +607,11 @@ Rebuild your local database and re-seed (new attendance columns).
 - `GET /contractors/{id}/workers?active=true&q=&flag=shared_device` →
 ```json
 {"id": 41, "contractor_id": 2, "contractor_name": "Maa Tara Mining Works", "user_id": null,
- "name": "Rekha Barik", "phone": "7000000041", "device_id": "DEV-SHARED-7F3A",
+ "name": "Budhan Rabidas", "phone": "7000000041", "device_id": "DEV-SHARED-7F3A",
  "bank_account_on_file": true,
- "training_valid_till": "2028-01-06", "training_status": "valid",
- "medical_valid_till": "2028-01-31", "medical_status": "valid",
- "daily_wage": 510.0, "below_min_wage": false, "is_active": true,
+ "training_valid_till": "2028-04-29", "training_status": "valid",
+ "medical_valid_till": "2028-03-30", "medical_status": "valid",
+ "daily_wage": 490.0, "below_min_wage": false, "is_active": true,
  "attendance_days_30d": 21, "flags": ["no_gate_entry", "shared_device"]}
 ```
   `flags` = the alert types this worker is part of (red chips in the table).
@@ -649,16 +651,16 @@ Rebuild your local database and re-seed (new attendance columns).
 - `GET /attendance?org_id=&mine_id=&contractor_id=&date=YYYY-MM-DD&valid=&gate_entry=&page=&page_size=` →
   paginated records for one day (default today), newest first.
 - `GET /attendance/summary?org_id=&mine_id=&date=` →
-  `{"date": "2026-09-26", "present": 89, "invalid": 8, "without_gate_entry": 8, "outside_boundary": 6, "expired_training": 2}`
+  `{"date": "2026-09-26", "present": 99, "invalid": 5, "without_gate_entry": 9, "outside_boundary": 1, "expired_training": 4}`
 - `GET /attendance/me?from=&to=` → the worker's own records (default last 30 days). `404` if the login isn't linked to a worker.
 - Times are UTC; show them in IST. `time` = when it was marked.
 
 #### Demo stories (seed 42)
-Ranking: **Maa Tara Mining Works score 3** (shared phone ×17, shared bank, 290 records without gate entry,
-attendance spikes up to 47 vs ~34, 3 workers at ₹310/day) · **Damodar Transport Co.** (Kusunda, many expired
-trainings) · **Hazaribagh Contractors** (licence expired; its workers' attendance is refused with
-"Contractor licence expired … work not allowed") · **Jharkhand Earthmovers** (licence expiring) ·
-**Shree Ganesh Enterprises** best, at 93.
+Ranking: **Maa Tara Mining Works score 3** (shared phone ×17, shared bank, 298 records without gate entry,
+attendance spikes up to 45 vs ~34, 3 workers at ₹310/day) · **Hazaribagh Contractors 70** (licence expired; its
+workers' attendance is refused with "Contractor licence expired … work not allowed") · **Jharkhand Earthmovers 71**
+(licence expiring) · Kusunda's contractors have the most expired safety trainings (~19% of workers vs ~6% elsewhere) ·
+best: Bharat Coal Handlers and Jharsuguda Infra at 93.
 
 ---
 
@@ -892,24 +894,23 @@ Report approval = `mine_manager, area_gm, subsidiary_admin, cil_admin` (**not** 
 #### `GET /dashboard/summary` (real values, CIL admin, sample data)
 ```json
 {"scope": {"mines": 12, "as_of": "2026-09-26"},
- "compliance_pct": 77.0, "compliance_pct_previous": 78.5, "compliance_delta": -1.5,
- "overdue_tasks": 292,
- "open_capas": {"total": 70, "lt7": 36, "d7_30": 30, "gt30": 4, "overdue": 23},
- "incidents_month": 9, "incidents_previous": 10, "near_miss_month": 24, "near_miss_previous": 38,
- "avg_trust_score": 86.2, "avg_trust_score_previous": 85.9,
- "active_workers_today": 463, "active_workers_same_day_last_week": 470, "invalid_attendance_today": 55,
+ "compliance_pct": 75.6, "compliance_pct_previous": 79.0, "compliance_delta": -3.4,
+ "overdue_tasks": 316,
+ "open_capas": {"total": 93, "lt7": 57, "d7_30": 25, "gt30": 11, "overdue": 31},
+ "incidents_month": 6, "incidents_previous": 7, "near_miss_month": 30, "near_miss_previous": 30,
+ "avg_trust_score": 87.7, "avg_trust_score_previous": 87.7,
+ "active_workers_today": 469, "active_workers_same_day_last_week": 504, "invalid_attendance_today": 45,
  "active_sos": 1,
  "top_risky_mines": [{"mine_id": 7, "mine_name": "Kusunda OCP", "risk_pct": 100.0, "level": "high",
-                      "reasons": [{"factor": "Overdue CAPAs", "value": 13, "impact_pct": 52.0}],
+                      "reasons": [{"factor": "Overdue CAPAs", "value": 9, "impact_pct": 36.0}],
                       "source": "simple_score", "top_reason": "Overdue CAPAs"}],
- "compliance_trend": [{"month": "2026-04", "pct": 88.5}, {"month": "2026-05", "pct": 90.8}, {"month": "2026-06", "pct": 88.4},
-                      {"month": "2026-07", "pct": 79.1}, {"month": "2026-08", "pct": 78.7}, {"month": "2026-09", "pct": 76.5}],
- "incidents_trend": [{"month": "2026-04", "incidents": 2, "near_miss": 12}, {"month": "2026-08", "incidents": 10, "near_miss": 34}],
- "capa_by_category": [{"category": "haul_road", "open": 12, "closed": 60}],
+ "compliance_trend": [{"month": "2026-04", "pct": 87.2}, {"month": "2026-05", "pct": 89.6}, {"month": "2026-06", "pct": 87.0},
+                      {"month": "2026-07", "pct": 77.5}, {"month": "2026-08", "pct": 76.4}, {"month": "2026-09", "pct": 76.0}],
+ "incidents_trend": [{"month": "2026-04", "incidents": 0, "near_miss": 20}, {"month": "2026-08", "incidents": 6, "near_miss": 29}],
+ "capa_by_category": [{"category": "water", "open": 20, "closed": 84}],
  "recent_alerts": [{"id": 1, "title": "…", "body": "…", "level": "critical", "kind": "sos", "link": "…", "read": false, "created_at": "…"}]}
 ```
-(Lists shortened here; `avg_trust_score_previous`, `active_workers_same_day_last_week`, `capa_by_category` values are
-illustrative, the rest are from a real run.) KPI card delta = value − `*_previous` (the previous 30 days).
+(Lists shortened here; all values are from a real run with the sample data.) KPI card delta = value − `*_previous` (the previous 30 days).
 "Workers present" compares with the same weekday last week. `recent_alerts` = the viewer's latest warning/critical notifications.
 
 #### `GET /dashboard/mine/{id}`
@@ -925,16 +926,16 @@ illustrative, the rest are from a real run.) KPI card delta = value − `*_previ
 #### `GET /dashboard/leaderboard?month=2026-09`
 ```json
 {"month": "2026-09", "by": "mine", "rows": [
-  {"rank": 1, "id": 15, "name": "Bhurkunda UG", "subsidiary": "CCL", "area": "Barka-Sayal Area",
-   "safety_score": 90.8, "previous_score": 84.0, "trend": "up",
-   "compliance_pct": 80.0, "capa_on_time_pct": 100.0, "incidents": 0, "overdue_capas": 0, "avg_trust_score": 88.1,
-   "breakdown": {"compliance": 32.0, "capa_on_time": 25.0, "photo_trust": 8.8, "no_incidents": 25.0, "overdue_penalty": 0.0}},
-  {"rank": 12, "name": "Kusunda OCP", "safety_score": 25.6, "previous_score": 60.2, "trend": "down"}]}
+  {"rank": 1, "id": 12, "name": "Piparwar OCP", "subsidiary": "CCL", "area": "Piparwar Area",
+   "safety_score": 86.6, "previous_score": 83.5, "trend": "up",
+   "compliance_pct": 82.1, "capa_on_time_pct": 80.0, "incidents": 0, "overdue_capas": 0, "avg_trust_score": 87.6,
+   "breakdown": {"compliance": 32.8, "capa_on_time": 20.0, "photo_trust": 8.8, "no_incidents": 25, "overdue_penalty": 0}},
+  {"rank": 12, "name": "Kusunda OCP", "safety_score": 32.5, "previous_score": 67.5, "trend": "down"}]}
 ```
-(Rows shortened; Bhurkunda's `capa_on_time_pct`, `avg_trust_score` and `breakdown` values are illustrative.)
+(Rows shortened; values from a real run.)
 Score = 40% compliance + 25% CAPAs closed on time + 10% photo trust + (25 − 8 per incident) − 2 per overdue CAPA
 (max 10). Show the `breakdown` in a tooltip. `by=subsidiary` → rows `{rank, id, name, code, mines, safety_score,
-previous_score, trend, incidents, overdue_capas}` (sample: MCL 83.5 > CCL 74.0 > BCCL 66.2).
+previous_score, trend, incidents, overdue_capas}` (sample: CCL 79.2 > MCL 78.0 > BCCL 59.0).
 The month defaults to the current month; the previous month is used for `trend`.
 
 #### Reports
@@ -942,11 +943,11 @@ The month defaults to the current month; the previous month is used for `trend`.
   Leave `mine_id` empty for **all mines** in `org_id` (default: the user's own area); e.g. a GM gets "Jharia Area". Response:
 ```json
 {"reports": [{"id": 1, "kind": "monthly_compliance", "month": "2026-09", "format": "pdf", "scope_label": "Moonidih UG",
-              "mine_id": 4, "org_id": 4, "size_bytes": 5603, "sha256": "27726c88496b…", "status": "generated",
+              "mine_id": 4, "org_id": 4, "size_bytes": 5815, "sha256": "27726c88496b…", "status": "generated",
               "generated_by": 4, "generated_by_name": "Vikram Mahato (Manager Moonidih)",
               "approved_by": null, "approved_by_name": null, "approved_at": null, "approvals_verified": true,
               "stored_in": "local", "url": "/reports/1/file?sig=…", "created_at": "…"}],
- "summary": {"compliance_pct": 75.0, "tasks_due": 168, "incidents": 0, "capas_opened": 12,
+ "summary": {"compliance_pct": 72.4, "tasks_due": 174, "incidents": 0, "capas_opened": 17,
              "suspicious_dispatch_mines": 0, "pm10_days_over_limit": 0}}
 ```
   One entry per requested format. It takes ~0.3 s. The `summary` is a quick preview for the page.
@@ -967,3 +968,64 @@ The month defaults to the current month; the previous month is used for `trend`.
 - **Verify:** `POST /reports/verify` (multipart `file`) →
   `{"match": true, "sha256": "…", "message": "Unchanged: this file matches the generated report.", "report": {"id", "month", "format", "scope_label", "status", "created_at"}}`
   or `{"match": false, "message": "No report with this fingerprint: the file was changed or was not generated by Khanan Netra."}`.
+
+---
+
+### Update: integration audit ✅ (read this even if you already built against the earlier docs)
+The whole backend was checked against the frontend prompts and these docs. What changed:
+
+#### 1. Times now carry their timezone
+Every date-time is sent as `…Z` or `…+00:00` (UTC). Before, it had no suffix, so a browser in India would have
+shown every time 5½ hours wrong. **If you appended "Z" yourself, remove that**; parse with `new Date(value)`.
+
+#### 2. Validation errors are one sentence
+`422` responses are now `{"detail": "field: message", "errors": [{"field", "message"}]}`; `detail` is always a string.
+
+#### 3. Photos now come with the records (no extra calls)
+- Tasks: `evidence` (next to `evidence_id`) → `{id, url, lat, lng, device_time, trust_score, trust_level, flags}` or `null`.
+- Findings (inspection detail, CAPA list/detail, finding responses): `photo` (same shape).
+- Attendance records: `selfie` (same shape).
+- Workers and contractor admins can open **only photos they uploaded** with `GET /evidence/{id}` (`403` otherwise).
+  Everything they may see still comes with a signed `url` inside the responses.
+
+#### 4. New endpoints for the Admin, Profile, My Reports and search screens
+| Screen | Endpoint |
+|---|---|
+| Admin → Users | `GET /users?org_id=&role=&q=&active=&page=` · `POST /users` · `GET/PATCH /users/{id}` · `POST /users/{id}/reset-password` |
+| Admin → Org Structure | `POST /org/units` · `PATCH /org/units/{id}` (plus the existing `GET /org/tree`, `GET /org/units`) |
+| Profile | `PATCH /auth/me` `{"name", "language": "en\|hi\|bn\|or"}` · `POST /auth/change-password` `{"current_password", "new_password"}` (min 8) |
+| Mobile → My Reports | `GET /me/reports?kind=&from=&to=&page=` |
+| Web → global search (Ctrl+K) | `GET /search?q=` |
+
+- **Users.** Who can manage whom: CIL admin → everyone (incl. regulators); subsidiary admin → GMs and mine staff in
+  their subsidiary; mine manager → safety officers, supervisors, workers and contractor admins of their mine.
+  - `POST /users` body `{"name", "phone" (10–15 digits), "role", "org_unit_id", "language", "password"?, "worker_id"?}`.
+    Without `password`, the response includes a one-time **`temporary_password`**: show it once and ask the user
+    to change it (`POST /auth/change-password`).
+  - `worker_id` links a worker's login to their worker record (needed for self-attendance).
+  - A role must sit at the right level (e.g. `mine_manager` on a mine, `area_gm` on an area), otherwise `422`.
+  - Duplicate phone → `409`. You can't deactivate yourself.
+  - Item: `{id, name, phone, role, language, is_active, org_unit_id, org_name, org_type, worker_id, created_at}`.
+- **Org units** (CIL admin; subsidiary admin inside their subsidiary): `POST /org/units`
+  `{"name", "type": "subsidiary|area|mine", "parent_id", "code"?, "mine_type": "UG|OC" (mines), "boundary": GeoJSON Polygon (mines)}`.
+  - The boundary is validated (a real polygon, `[lng, lat]` inside India) and its centre is computed.
+  - A new mine shows up at once in lists, the map and dashboards; its manager then fills the Mine Profile.
+  - `PATCH /org/units/{id}` renames a unit or corrects a mine's type or boundary.
+- **My Reports:** items `{kind, id, title, status, created_at, mine_id, link, evidence_id, trust_score, trust_level, flags}`.
+  - `kind` ∈ `report, finding, task, attendance, capa_fix, grievance`.
+  - `status` is plain text (e.g. `"capa open"`, `"accepted"`, `"refused: You are 2.2 km outside Moonidih UG."`,
+    `"rejected: 411 m from the before-photo (limit 30 m)"`). Anonymous items are not listed.
+- **Search:** `{"q", "results": [{"type": "mine|capa|inspection|contractor|worker|grievance", "id", "title", "subtitle", "link"}]}`
+  (max 5 per type, only the user's area; `#123` finds CAPA/inspection 123; `GRV-XXXXXX` finds a grievance for officers).
+
+#### 5. Mine profile: every field now matters
+All 15 fields change which rules apply (depth, capacity, washery, EC number, CTO date and state were added). Show
+the "why it applies" sentence; it now also says e.g. "the mine is 380 m deep" or "the Consent to Operate expires on
+02 Dec 2026". **The CTO renewal task is due 90 days before the CTO expiry date in the profile** (not on 31 March);
+it moves when the date changes. Obligations may carry `due_rule` (e.g. `{"field": "cto_valid_till", "days_before": 90}`).
+
+#### 6. Real deployment
+A backend started with `AUTO_BOOTSTRAP=false` has no demo data; the first admin is created with
+`python -m seed.create_admin`, and everything else is built through the screens above. The rule catalogue,
+checklists and escalation rules are always installed. The numbers quoted in this file were re-measured from the
+current sample data.

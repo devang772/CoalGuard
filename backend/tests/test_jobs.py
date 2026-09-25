@@ -178,7 +178,16 @@ def test_morning_digest_and_nightly(ids):
     before = count(ids["manager"], kind="digest")
     assert run("morning_digest")["digests_sent"] > 0
     assert count(ids["manager"], kind="digest") == before + 1
-    assert set(run("nightly")) == {"tasks_created", "tasks_marked_overdue"}
+    assert set(run("nightly")) == {"tasks_created", "tasks_marked_overdue", "contractor_scores_updated"}
+
+
+def test_stored_contractor_scores_match_the_api(client, login):
+    run("nightly")
+    live = {r["id"]: r["score"] for r in client.get("/contractors", headers=login(CIL)).json()}
+    with SessionLocal() as db:
+        from app.models import Contractor
+        stored = {c.id: c.score for c in db.scalars(select(Contractor))}
+    assert stored == live
 
 
 def test_demo_clock():

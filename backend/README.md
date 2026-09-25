@@ -1,7 +1,7 @@
 # Khanan Netra: Backend API
 
 AI-based smart governance and compliance monitoring for coal mines (SIH PS 26024).
-Built with **FastAPI + PostgreSQL**. 119 automated tests.
+Built with **FastAPI + PostgreSQL**. 132 automated tests.
 
 **What it does:** mine profile → applicable laws → task calendar · inspections → automatic CAPA fix-it tickets ·
 Satya Proof (photos that can't be faked: GPS/boundary, reused-photo, time and EXIF checks) · before/after closure
@@ -50,9 +50,9 @@ Open **http://localhost:8000/docs**. The first start creates all tables plus the
 The same `--seed` always gives the same data, so everyone on the team sees identical records.
 Mines and users are kept on `--reset`. All generated data is **sample data**.
 
-Roughly created (180 days): 35 catalogue obligations, 12 mine profiles, ~330 mine-obligation links,
-~4,700 compliance tasks, ~625 inspections, ~900 findings + CAPAs, ~1,900 evidence records, ~830 approvals,
-~330 field reports (some Hindi voice), 15 contractors, 612 workers, ~41,000 attendance rows,
+Roughly created (180 days): 12 mine profiles, ~370 mine-obligation links (from the 43-rule catalogue),
+~5,000 compliance tasks, ~630 inspections, ~920 findings + CAPAs, ~1,900 evidence records, ~820 approvals,
+~370 field reports (some Hindi voice), 15 contractors, 612 workers, ~41,000 attendance rows,
 daily production and PM10/noise readings, 25 grievances.
 
 **Planted patterns** (for the AI features and the demo):
@@ -95,6 +95,17 @@ Every other mine/area/subsidiary also gets a manager, safety officer, GM or admi
 Updated after every module:
 - [docs/FOR_FRONTEND_TEAM.md](docs/FOR_FRONTEND_TEAM.md): endpoints, response shapes, flow changes, demo stories
 - [docs/FOR_ML_TEAM.md](docs/FOR_ML_TEAM.md): tables, training data, planted patterns, plug-in contracts
+
+## Real deployment (no demo data)
+```bash
+# .env: AUTO_BOOTSTRAP=false, a long random JWT_SECRET, your DATABASE_URL (empty database)
+.venv/Scripts/python -m seed.create_admin --phone <10 digits> --name "<name>"   # asks for the password
+```
+Start the server, log in as that admin, then add subsidiaries / areas / mines (`POST /org/units`) and people
+(`POST /users`). Each mine manager fills the mine profile, which creates the mine's obligations and tasks.
+The obligation catalogue (`LOAD_SAMPLE_CATALOGUE`, used when the ML engine is not available), inspection
+checklists and escalation rules are installed automatically at startup. The server logs a **SECURITY** warning
+while the default JWT secret or the demo logins are in use.
 
 ## Background jobs (alarm clock)
 Run inside the API process when `SCHEDULER_ENABLED=true` (only one process should run them):
@@ -250,5 +261,13 @@ def recommend_obligations(profile: dict) -> list[dict]:
 | POST, GET | `/reports` | generate monthly PDF + Excel (fingerprinted) / report history |
 | GET | `/reports/{id}`, `/reports/{id}/file` | report details / download (signed link or token) |
 | POST | `/reports/verify` | upload a file: is it exactly the generated report? |
+| GET, POST | `/users` | admin: list / create users (temporary password, worker link) |
+| GET, PATCH | `/users/{id}` | admin: view / edit / deactivate |
+| POST | `/users/{id}/reset-password` | admin: new temporary password |
+| POST, PATCH | `/org/units`, `/org/units/{id}` | admin: add / edit subsidiary, area, mine (boundary) |
+| PATCH | `/auth/me` | change own name / language |
+| POST | `/auth/change-password` | change own password |
+| GET | `/me/reports` | everything I submitted, with status + trust |
+| GET | `/search?q=` | global search (mines, CAPAs, inspections, contractors, workers, grievances) |
 
 Full request/response details: [docs/FOR_FRONTEND_TEAM.md](docs/FOR_FRONTEND_TEAM.md).

@@ -21,7 +21,7 @@ from app.config import settings
 from app.constants import Category, Frequency, Severity
 from app.models import MineObligation, MineProfile, Obligation
 from app.services.applicability import fallback_recommend, profile_to_dict
-from app.services.tasks import generate_tasks, remove_future_tasks
+from app.services.tasks import DATE_FIELDS, generate_tasks, remove_future_tasks
 
 log = logging.getLogger(__name__)
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ml-engine")
@@ -79,6 +79,16 @@ def _ask_ml_engine(profile: dict) -> tuple[list[dict] | None, str | None]:
     return good, None
 
 
+def _valid_due_rule(rule) -> dict | None:
+    """Optional date-based due date from the ML engine, e.g. {"field": "cto_valid_till", "days_before": 90}."""
+    if not isinstance(rule, dict) or rule.get("field") not in DATE_FIELDS:
+        return None
+    days = rule.get("days_before", 0)
+    if not isinstance(days, int) or not 0 <= days <= 730:
+        return None
+    return {"field": rule["field"], "days_before": days}
+
+
 def _upsert_ml_obligations(db: Session, items: list[dict]) -> list[dict]:
     """Store ML obligations in the catalogue (by code) and return recommendations with ids."""
     by_code = {o.code: o for o in db.scalars(select(Obligation).where(
@@ -96,6 +106,7 @@ def _upsert_ml_obligations(db: Session, items: list[dict]) -> list[dict]:
         ob.category, ob.frequency, ob.severity = item["category"], item["frequency"], item["severity"]
         ob.evidence_needed = item.get("evidence_needed") or ""
         ob.source_text = item.get("source_text")
+        ob.due_rule = _valid_due_rule(item.get("due_rule"))
         db.flush()
         confidence = item.get("confidence", 1.0)
         recommendations.append({

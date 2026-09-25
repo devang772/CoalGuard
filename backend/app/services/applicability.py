@@ -7,7 +7,9 @@ An obligation's `applies_when` is a dict of profile field -> condition:
     {"working_method": ["UG", "MIXED"]}     value must be one of the list
     {"uses_explosives": True}               value must equal this
     {"worker_count": {"min": 100}}          number range (min and/or max)
+    {"ec_number": {"present": True}}        the field must be filled in (text or date)
 All conditions must hold. Empty / None means "applies to every mine".
+All 15 profile fields can be used; the sample catalogue (seed/sample_data.py) uses every one of them.
 """
 from collections.abc import Iterable
 from typing import Any
@@ -28,6 +30,9 @@ _LABELS = {
     "worker_count": "number of workers",
     "contract_worker_count": "number of contract workers",
     "production_capacity_mtpa": "production capacity (MTPA)",
+    "ec_number": "Environmental Clearance number",
+    "cto_valid_till": "Consent to Operate expiry date",
+    "state": "state",
 }
 _TRUE_PHRASES = {
     "uses_explosives": "the mine uses explosives",
@@ -47,6 +52,16 @@ def profile_to_dict(profile: MineProfile) -> dict[str, Any]:
 def _describe(field: str, value: Any) -> str:
     if field == "working_method":
         return f"the working method is {_METHOD_WORDS.get(value, value)}"
+    if field == "depth_m":
+        return f"the mine is {value:g} m deep"
+    if field == "production_capacity_mtpa":
+        return f"the production capacity is {value:g} MTPA"
+    if field == "state":
+        return f"the mine is in {value}"
+    if field == "ec_number":
+        return f"Environmental Clearance {value} is on file"
+    if field == "cto_valid_till":
+        return f"the Consent to Operate expires on {value:%d %b %Y}"
     return f"the {_LABELS.get(field, field.replace('_', ' '))} is {value}"
 
 
@@ -57,7 +72,14 @@ def evaluate(applies_when: dict | None, profile: dict[str, Any]) -> tuple[bool, 
     reasons: list[str] = []
     for field, rule in applies_when.items():
         value = profile.get(field)
-        if isinstance(rule, dict):
+        if isinstance(rule, dict) and "present" in rule:
+            filled = value not in (None, "")
+            if filled != bool(rule["present"]):
+                return False, (f"The profile has no {_LABELS.get(field, field.replace('_', ' '))}." if rule["present"]
+                               else f"Applies only when {field.replace('_', ' ')} is empty.")
+            if filled:
+                reasons.append(_describe(field, value))
+        elif isinstance(rule, dict):
             if value is None:
                 return False, f"Profile does not state the {_LABELS.get(field, field)}."
             if "min" in rule and value < rule["min"]:
