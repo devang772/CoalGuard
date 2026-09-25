@@ -7,8 +7,8 @@ Built with **FastAPI + PostgreSQL**.
 | Module | What | Status |
 |---|---|---|
 | 1 | Foundation: setup, all tables, login, roles, scope filter | ✅ Done |
-| 2 | Fake data generator | ⏳ |
-| 3 | Mines, map data, rules, compliance tasks | ⏳ |
+| 2 | Fake data generator + mine profile / applicable-obligation tables | ✅ Done |
+| 3 | Mine profile, applicable obligations, compliance tasks, map data | ⏳ |
 | 4 | Inspections, findings, CAPA, approvals | ⏳ |
 | 5 | Satya Proof, before/after closure, tamper-proof audit | ⏳ |
 | 6 | Contractors, workers, attendance, fraud rules | ⏳ |
@@ -30,6 +30,37 @@ docker compose up -d            # starts PostgreSQL on localhost:5434
 .venv/Scripts/python -m uvicorn app.main:app --reload --port 8000
 ```
 Open **http://localhost:8000/docs**. The first start creates all tables plus the starter data automatically.
+
+### Fill the database with 6 months of sample activity
+```bash
+.venv/Scripts/python -m seed.generate            # 180 days ending today (~15 s)
+.venv/Scripts/python -m seed.generate --reset    # wipe activity data and generate again
+.venv/Scripts/python -m seed.generate --days 90 --seed 7
+```
+The same `--seed` always gives the same data, so everyone on the team sees identical records.
+Mines and users are kept on `--reset`. All generated data is **sample data**.
+
+Roughly created (180 days): 35 catalogue obligations, 12 mine profiles, ~330 mine-obligation links,
+~4,700 compliance tasks, ~650 inspections, ~850 findings + CAPAs, ~1,900 evidence records,
+~550 field reports (some Hindi voice), 15 contractors, 612 workers, ~41,000 attendance rows,
+daily production and PM10/noise readings, 25 grievances.
+
+**Planted patterns** (for the AI features and the demo):
+1. Kusunda OCP gets riskier every week over the last 8 weeks (overdue tasks/CAPAs, near-misses, incidents)
+2. Monsoon (Jul–Sep): more incidents, roof and water problems
+3. Bastacolla OCP: 6 days where dispatch is ~50% of production
+4. Moonidih UG, "Maa Tara Mining Works": attendance spikes on 5 days by workers with no gate entry,
+   17 workers on one shared phone (`DEV-SHARED-7F3A`), 2 sharing a bank account, 3 paid below minimum wage
+5. Repeated "haul road spillage" findings (different wording) at Kusunda (6×) and Bastacolla (5×)
+6. PM10 dust spikes (>180 µg/m³) on 6 days at Ashoka OCP
+7. One rejected CAPA closure at Moonidih (reused photo, 412 m away) and one unacknowledged SOS
+
+### If you pulled a newer version and the tables changed
+There are no migrations yet (hackathon speed). Rebuild your **local** database, then re-seed:
+```bash
+.venv/Scripts/python -c "from app import models; from app.db import Base, engine; Base.metadata.drop_all(engine); Base.metadata.create_all(engine)"
+.venv/Scripts/python -m seed.generate
+```
 
 If port 5434 is busy, set `DB_PORT=5435` in your shell before `docker compose up -d`, and change the port in `DATABASE_URL` in `.env`.
 
@@ -62,15 +93,36 @@ app/
   main.py        # app entry: creates tables, runs starter data, plugs in routers
   config.py      # settings from .env
   db.py          # database connection + get_db
-  models.py      # ALL tables (21)
+  models.py      # ALL tables (23)
   schemas.py     # request/response shapes
   constants.py   # roles, org types, severities, categories, frequencies
   security.py    # bcrypt password hashing, JWT tokens
   auth.py        # get_current_user, require_roles, scope_mine_ids, ensure_mine_access
   routers/       # one file per feature area (auth, health, ...)
+  services/
+    applicability.py   # fallback "which obligations apply to this mine profile" matcher
 seed/bootstrap.py  # org tree (CIL > 3 subsidiaries > 6 areas > 12 mines) + demo users + escalation rules
+seed/generate.py   # 6 months of sample activity with planted patterns
+seed/sample_data.py  # sample obligation catalogue, mine profiles, checklists, texts, names
 tests/
 ```
+
+## Compliance flow: mine profile → applicable obligations → tasks
+Users do **not** upload rule PDFs. The mine manager fills a **mine profile** (`mine_profiles`: working
+method, depth, gas degree, workers, explosives, conveyors, HEMM, water body, forest land, EC/CTO…).
+The **ML engine** (already trained on the laws/circulars) returns the obligations that apply, each with
+a reason; they are stored in `mine_obligations` and turned into `compliance_tasks`.
+
+Plug-in point for the ML teammate (Module 3 calls it; falls back to `app/services/applicability.py` if missing):
+```python
+# app/ai/obligation_engine.py
+def recommend_obligations(profile: dict) -> list[dict]:
+    """profile: the mine_profiles fields as a dict.
+    Return [{code, title, law_ref, category, frequency, evidence_needed, severity,
+             source_text, reason, confidence}, ...]"""
+```
+`category` ∈ safety/environment/labour/production; `frequency` ∈ daily/weekly/monthly/quarterly/yearly;
+`severity` ∈ low/medium/high/critical. `code` must be stable (it is used to avoid duplicates).
 
 ## Key rules for everyone adding code
 - **Always filter by scope:** `ids = scope_mine_ids(db, user, org_id)`; for a single mine use `ensure_mine_access(db, user, mine_id)`.

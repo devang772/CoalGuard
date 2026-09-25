@@ -54,11 +54,41 @@ class User(TimestampMixin, Base):
 
 # ---------------------------------------------------------------- rules & compliance tasks
 
+class MineProfile(TimestampMixin, Base):
+    """Facts about a mine that decide which laws apply to it.
+    The mine manager fills this; the ML engine (or the fallback matcher) reads it."""
+    __tablename__ = "mine_profiles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    mine_id: Mapped[int] = mapped_column(ForeignKey("org_units.id"), unique=True)
+    working_method: Mapped[str] = mapped_column(String(10))              # UG / OC / MIXED
+    depth_m: Mapped[float | None] = mapped_column(Float)
+    seam_gas_degree: Mapped[int | None] = mapped_column(Integer)         # 1 / 2 / 3 (UG only)
+    worker_count: Mapped[int] = mapped_column(Integer, default=0)
+    contract_worker_count: Mapped[int] = mapped_column(Integer, default=0)
+    production_capacity_mtpa: Mapped[float | None] = mapped_column(Float)
+    uses_explosives: Mapped[bool] = mapped_column(Boolean, default=False)
+    has_conveyor: Mapped[bool] = mapped_column(Boolean, default=False)
+    has_hemm: Mapped[bool] = mapped_column(Boolean, default=False)        # heavy earth-moving machinery
+    has_washery: Mapped[bool] = mapped_column(Boolean, default=False)
+    near_water_body: Mapped[bool] = mapped_column(Boolean, default=False)
+    forest_land: Mapped[bool] = mapped_column(Boolean, default=False)
+    ec_number: Mapped[str | None] = mapped_column(String(60))             # Environmental Clearance
+    cto_valid_till: Mapped[date | None] = mapped_column(Date)             # Consent to Operate
+    state: Mapped[str | None] = mapped_column(String(40))
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
 class Obligation(TimestampMixin, Base):
-    """A repeatable duty taken from a law / circular / EC condition."""
+    """One entry of the rule catalogue: a repeatable duty from a law / circular / EC condition.
+    Filled by the ML engine (source="ml_engine") or the sample catalogue (source="catalogue")."""
     __tablename__ = "obligations"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str | None] = mapped_column(String(40), unique=True)    # stable id, e.g. SAF-ROOF-D
+    source: Mapped[str] = mapped_column(String(15), default="manual")    # ml_engine / catalogue / manual
+    applies_when: Mapped[dict | None] = mapped_column(JSON)              # fallback matching condition
     title: Mapped[str] = mapped_column(String(300))
     law_ref: Mapped[str] = mapped_column(String(200), default="Not specified")
     category: Mapped[str] = mapped_column(String(20), index=True)        # constants.Category
@@ -69,10 +99,28 @@ class Obligation(TimestampMixin, Base):
     source_text: Mapped[str | None] = mapped_column(Text)
     source_document: Mapped[str | None] = mapped_column(String(255))
     created_by_ai: Mapped[bool] = mapped_column(Boolean, default=False)
-    applies_to_mine_ids: Mapped[list | None] = mapped_column(JSON)       # null = all mines
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     approved_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class MineObligation(TimestampMixin, Base):
+    """Which obligation applies to which mine, and why."""
+    __tablename__ = "mine_obligations"
+    __table_args__ = (UniqueConstraint("mine_id", "obligation_id", name="uq_mine_obligation"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    mine_id: Mapped[int] = mapped_column(ForeignKey("org_units.id"), index=True)
+    obligation_id: Mapped[int] = mapped_column(ForeignKey("obligations.id"), index=True)
+    status: Mapped[str] = mapped_column(String(15), default="active")    # active / not_applicable
+    reason: Mapped[str] = mapped_column(Text, default="")                # why it applies
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    source: Mapped[str] = mapped_column(String(15), default="rules_fallback")  # ml_engine / rules_fallback
+    remark: Mapped[str | None] = mapped_column(Text)                     # manager's note if marked N/A
+    decided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    obligation: Mapped[Obligation] = relationship()
 
 
 class ComplianceTask(TimestampMixin, Base):

@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     auto_bootstrap: bool = True
     demo_password: str = "demo123"
 
+    # Sample thresholds used by checks and alerts (replace with official values per state/notification)
+    min_daily_wage: float = 450.0
+    pm10_limit: float = 100.0
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
