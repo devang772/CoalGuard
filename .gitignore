@@ -1,36 +1,20 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-
-# Node modules & build outputs
-node_modules/
-dist/
-dist-ssr/
-.output/
-.tanstack/
-.nitro/
-.cache/
-
-# Environment & local secrets
+# Environment variables
 .env
-.env.local
-.env.*.local
-*.local
 
-# Python / AI Services cache
+# Python cache
 __pycache__/
 *.pyc
 *.pyo
+
+# Virtual environments
+venv/
 .venv/
 env/
-venv/
-.pytest_cache/
 
-# IDE & OS files
-.vscode/*
-!.vscode/extensions.json
+# IDE
+.vscode/
 .idea/
+
+# OS
 .DS_Store
 Thumbs.db

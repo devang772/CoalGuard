@@ -4309,3 +4309,30 @@ footer>span {
 .reveal-delay-3 { transition-delay: 0.3s; }
 .reveal-delay-4 { transition-delay: 0.4s; }
 .reveal-delay-5 { transition-delay: 0.5s; }
+
+/* Force white text color on all dark green buttons and badges across the application */
+.bg-emerald-600,
+.bg-emerald-700,
+.bg-emerald-800,
+.bg-emerald-900,
+.bg-teal-600,
+.bg-teal-700,
+.bg-teal-800,
+.bg-green-600,
+.bg-green-700,
+.bg-green-800 {
+  color: #ffffff !important;
+}
+
+.bg-emerald-600 *,
+.bg-emerald-700 *,
+.bg-emerald-800 *,
+.bg-emerald-900 *,
+.bg-teal-600 *,
+.bg-teal-700 *,
+.bg-teal-800 *,
+.bg-green-600 *,
+.bg-green-700 *,
+.bg-green-800 * {
+  color: #ffffff !important;
+}
