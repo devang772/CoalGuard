@@ -12,7 +12,8 @@ from app.deps import Pagination, check_evidence, get_mine_in_scope, resolve_mine
 from app.models import Capa, Evidence, Finding, OrgUnit, User
 from app.schemas import CapaAssign, CapaCloseRequest, CapaDetail, CapaOut, CapaSummary, FindingOut, Page
 from app.services.approvals import history, verify_approvals
-from app.services.capa import closure_checks
+from app.services.capa import AFTER_PHOTO_REQUIRED, closure_checks
+from app.services.evidence import evidence_brief
 from app.utils import utcnow
 
 router = APIRouter(prefix="/capa", tags=["CAPA"])
@@ -70,6 +71,8 @@ def capa_detail(db: Session, capa: Capa) -> dict:
                          "approver_name": names.get(a.approver_id), "decision": a.decision, "remark": a.remark,
                          "hash": a.hash, "created_at": a.created_at} for a in approvals]
     row["approvals_verified"] = verify_approvals(approvals)
+    row["before_photo"] = evidence_brief(db, row["finding"]["photo_evidence_id"])
+    row["after_photo"] = evidence_brief(db, capa.after_evidence_id)
     return row
 
 
@@ -158,8 +161,10 @@ def assign_owner(capa_id: int, body: CapaAssign, user: User = Depends(require_ro
 @router.post("/{capa_id}/request-closure", response_model=CapaDetail)
 def request_closure(capa_id: int, body: CapaCloseRequest,
                     user: User = Depends(require_roles(*Role.FIELD_OFFICERS)), db: Session = Depends(get_db)):
-    """'I fixed it': submit the fix (optional after-photo + note). The CAPA moves to in_review and waits for
-    a second person to approve (two-person rule). Allowed from open or rejected."""
+    """'I fixed it': submit the fix with an after-photo (required for high/critical) and a note.
+    Satya Proof checks run automatically (same location, fresh photo, taken after the report, trust score,
+    optional AI check): any failure -> 'rejected' with reasons; all passed -> 'in_review', waiting for a
+    second person to approve (two-person rule). Allowed from open or rejected."""
     capa = load_capa(db, user, capa_id)
     if user.id != capa.owner_id and user.org_unit_id != capa.mine_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
@@ -167,13 +172,18 @@ def request_closure(capa_id: int, body: CapaCloseRequest,
     if capa.status not in ACTIVE:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                             detail=f"A fix can't be submitted while the CAPA is '{capa.status}'.")
+    finding = db.get(Finding, capa.finding_id)
+    if body.evidence_id is None and finding.severity in AFTER_PHOTO_REQUIRED:
+        raise HTTPException(status_code=422, detail="An after-photo is required to close high or critical problems.")
     check_evidence(db, body.evidence_id, capa.mine_id)
+    after = db.get(Evidence, body.evidence_id) if body.evidence_id else None
     capa.after_evidence_id = body.evidence_id
     capa.closure_note = body.note
     capa.closure_requested_by = user.id
     capa.closure_requested_at = utcnow()
-    checks = closure_checks(db, capa, db.get(Evidence, body.evidence_id) if body.evidence_id else None)
+    checks = closure_checks(db, capa, after)
     capa.closure_checks = checks or None
+    capa.closure_score = float(after.trust_score) if after and after.trust_score is not None else None
     capa.status = "rejected" if any(not c["passed"] for c in checks) else "in_review"
     db.commit()
     return capa_detail(db, capa)

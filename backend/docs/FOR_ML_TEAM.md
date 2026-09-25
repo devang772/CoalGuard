@@ -12,8 +12,9 @@ Branch: `backend` · Folder: `backend/` · Your code goes in `backend/app/ai/` a
 | 2. Sample data + mine-profile model | ✅ | **Your training data** + the obligation-engine contract |
 | 3. Mine profile + obligations + tasks | ✅ | **Calls your `recommend_obligations(profile)`** and **your `predict_risk(db, mine_ids)`** (both optional; safe fallbacks) |
 | 4. Inspections, findings, CAPA | ✅ | findings/CAPAs now also created through the API; new CAPA columns; `approvals` table filled |
-| 5. Satya Proof + audit | ⏳ next | CAPA closure will call your `verify_hazard_gone()` if present |
-| 6–9 | ⏳ | dashboards reuse `predict_risk()` |
+| 5. Satya Proof + audit | ✅ | **Calls your `verify_hazard_gone()`** during CAPA closure; real photo files + trust scores; audit history |
+| 6. Contractors, attendance, fraud | ⏳ next | ghost-worker rules (you may add ML on top) |
+| 7–9 | ⏳ | dashboards reuse `predict_risk()` |
 
 ---
 
@@ -243,3 +244,53 @@ and these rows look exactly like the seeded ones, meaning your models don't need
 ~625 inspections, ~900 findings + CAPAs (≈56 open, 13 in review, ≈830 closed, 1 rejected; 23 overdue),
 ~830 approvals, ~330 field reports. The Kusunda/monsoon/Bastacolla/ghost/spillage/PM10 patterns are unchanged,
 and Kusunda is still the only high-risk mine with the simple score.
+
+---
+
+### Module 5: Satya Proof + before/after closure + audit chain ✅
+**Rebuild your local DB and re-seed** again (new columns). `pip install -r requirements.txt` for the new
+libraries: Pillow, imagehash, shapely.
+
+#### C. Your third plug-in point is live: `app/ai/photo_check.py` → `verify_hazard_gone(...)`
+```python
+def verify_hazard_gone(before_path: str, after_path: str, finding_text: str) -> dict:
+    """before_path / after_path: absolute paths of the two photo files on disk.
+    finding_text: the finding description, e.g. "Loose roof at goaf edge".
+    Return {"hazard_gone": bool, "confidence": 0..1, "explanation": "one short sentence for the user"}"""
+```
+- **Called when** someone submits a CAPA fix with an after-photo AND the finding has a before-photo AND both files
+  exist on disk (sample-data photos have no files, so they're skipped).
+- It runs in a background thread with the same **20 s timeout** (`ML_TIMEOUT_SECONDS`). If your module is missing,
+  raises, times out, or returns something without `hazard_gone`, the AI check is **silently skipped**, so the
+  closure never gets stuck.
+- Your result becomes the closure check `{"name": "AI: hazard no longer visible", "passed": hazard_gone,
+  "detail": explanation}`. **`hazard_gone: False` rejects the closure automatically**, so keep false positives
+  low (when unsure, return True with a low confidence).
+- The test `tests/test_proof.py::test_ai_hazard_check_is_used_when_available` shows a fake module being injected.
+- `POST /ai/photo-check` (single-photo PPE/hazard check) from your plan is independent; you can build it any time.
+
+#### What the backend already does itself (no ML needed; don't duplicate)
+Every upload gets a **trust score 0–100** from rule checks (`app/services/proof.py`): inside the mine boundary
+(shapely), GPS accuracy ≤ 50 m, mock-location flag, exact copy (SHA-256) or look-alike (perceptual hash, Hamming
+distance ≤ 5) of any earlier photo, time checks (phone clock, EXIF time, > 7 days old), EXIF camera details,
+EXIF GPS vs phone GPS. Before/after closure adds: after-photo within 30 m, not the before-photo again, taken after
+the finding, trust ≥ 60.
+
+#### Table changes / data you can use
+- **`evidence`**: new `checks` (JSON list `[{name, passed, penalty, detail}]`), `content_type`, `size_bytes`.
+  Useful columns: `trust_score`, `flags`, `phash` (16-hex perceptual hash), `sha256`, `exif` (make, model,
+  datetime_original, gps_lat/gps_lng), `lat/lng/accuracy`, `device_time` (capture time, UTC), `server_time`.
+  Uploaded files live under `backend/uploads/YYYY/MM/<random>.jpg`. Use
+  `app.services.evidence.file_on_disk(evidence)`, which returns the `Path`, or `None` for sample records.
+  Sample-data evidence rows (`file_path` starting with `seed/`) have random phashes and **no image files**.
+- **`audit_logs`** (the tamper-proof history), filled automatically for changes made through the app:
+  `table_name, record_id, action (create|update|delete|seed), user_id, mine_id, data (JSON snapshot), prev_hash,
+  hash, created_at`. It's a good source of **behaviour features** (e.g. how often CAPA owners are changed, how fast
+  fixes are submitted, re-submissions after rejection). The sample data is one `seed` entry.
+- Findings / CAPAs created through the app now carry real photos, so they're good for testing your photo models
+  end-to-end: `POST /evidence` → `POST /inspections/{id}/findings` with `photo_evidence_id`.
+
+#### One rule for any code that changes data
+If your code **writes** to the database (e.g. saving obligations), use the ORM (`db.add`, attribute changes,
+`db.delete`) and not bulk `update()`/`delete()` statements. Only ORM changes are recorded in the audit chain;
+bulk statements would later show up as "changed outside the app" (a false tamper alarm).

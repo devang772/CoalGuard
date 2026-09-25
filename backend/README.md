@@ -10,7 +10,7 @@ Built with **FastAPI + PostgreSQL**.
 | 2 | Fake data generator + mine profile / applicable-obligation tables | ✅ Done |
 | 3 | Mine profile, applicable obligations, compliance tasks, map data | ✅ Done |
 | 4 | Inspections, findings, CAPA, approvals | ✅ Done |
-| 5 | Satya Proof, before/after closure, tamper-proof audit | ⏳ |
+| 5 | Satya Proof, before/after closure, tamper-proof audit | ✅ Done |
 | 6 | Contractors, workers, attendance, fraud rules | ⏳ |
 | 7 | Field reports, SOS, grievances, notifications, offline sync | ⏳ |
 | 8 | Reminders and escalation ladder | ⏳ |
@@ -53,7 +53,7 @@ daily production and PM10/noise readings, 25 grievances.
    17 workers on one shared phone (`DEV-SHARED-7F3A`), 2 sharing a bank account, 3 paid below minimum wage
 5. Repeated "haul road spillage" findings (different wording) at Kusunda (6×) and Bastacolla (5×)
 6. PM10 dust spikes (>180 µg/m³) on 6 days at Ashoka OCP
-7. One rejected CAPA closure at Moonidih (reused photo, 412 m away) and one unacknowledged SOS
+7. One rejected CAPA closure at Moonidih (reused photo, 411 m away) and one unacknowledged SOS
 
 ### If you pulled a newer version and the tables changed
 There are no migrations yet (hackathon speed). Rebuild your **local** database, then re-seed:
@@ -86,6 +86,10 @@ Updated after every module:
 - [docs/FOR_FRONTEND_TEAM.md](docs/FOR_FRONTEND_TEAM.md): endpoints, response shapes, flow changes, demo stories
 - [docs/FOR_ML_TEAM.md](docs/FOR_ML_TEAM.md): tables, training data, planted patterns, plug-in contracts
 
+## Photo uploads
+Photos are stored under `backend/uploads/YYYY/MM/` (set `UPLOAD_DIR` to change; the folder is git-ignored).
+Each upload is checked automatically (Satya Proof) and gets a trust score; see `app/services/proof.py`.
+
 ## Run tests
 ```bash
 .venv/Scripts/python -m pytest -q
@@ -112,6 +116,10 @@ app/
     mines.py           # mine summary numbers for lists and the map
     capa.py            # CAPA creation from a finding (owner, deadline), closure-check hook
     approvals.py       # tamper-evident approvals (hash chain per record)
+    proof.py           # Satya Proof: photo trust checks + score
+    evidence.py        # evidence locker: file storage, signed image links, placeholder
+    geo.py             # distances, inside-the-mine-boundary check
+    audit.py           # automatic hash-chained history of every change + verify
   deps.py        # shared router helpers (mine-in-scope check, filters, pagination)
 seed/bootstrap.py  # org tree (CIL > 3 subsidiaries > 6 areas > 12 mines) + demo users + escalation rules
 seed/generate.py   # 6 months of sample activity with planted patterns
@@ -174,5 +182,10 @@ def recommend_obligations(profile: dict) -> list[dict]:
 | POST | `/capa/{id}/assign` | hand the CAPA to another person at the mine |
 | POST | `/capa/{id}/request-closure` | "I fixed it" → in review |
 | POST, GET | `/approvals` | approve / reject a fix (two-person rule), history |
+| POST | `/evidence` | upload a photo → trust score 0-100 with reasons |
+| GET | `/evidence/{id}`, `/evidence?ids=` | evidence details with a signed image `url` |
+| GET | `/evidence/{id}/file` | the image (signed link or Bearer token) |
+| GET | `/audit/verify` | verify the history chain + detect edits made outside the app |
+| GET | `/audit/recent`, `/audit/{table}/{id}` | recent changes / full history of one record |
 
 Full request/response details: [docs/FOR_FRONTEND_TEAM.md](docs/FOR_FRONTEND_TEAM.md).

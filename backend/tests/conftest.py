@@ -6,6 +6,7 @@ _tmp_dir = tempfile.mkdtemp(prefix="netra_test_")
 os.environ["DATABASE_URL"] = f"sqlite:///{os.path.join(_tmp_dir, 'test.db')}"
 os.environ["AUTO_BOOTSTRAP"] = "true"
 os.environ["JWT_SECRET"] = "test-secret-please-ignore-0123456789"
+os.environ["UPLOAD_DIR"] = os.path.join(_tmp_dir, "uploads")
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

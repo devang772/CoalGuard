@@ -145,9 +145,10 @@ def test_reassign_owner(client, login):
 
 # ---------------------------------------------------------------- closure & approvals
 
-def _new_capa(client, login):
+def _new_capa(client, login, severity="medium"):
+    """Medium severity: the after-photo is optional (photo rules are tested in test_proof.py)."""
     inspection = start(client, login).json()
-    return add_finding(client, login, inspection["id"], "high").json()["capa_id"]
+    return add_finding(client, login, inspection["id"], severity).json()["capa_id"]
 
 
 def decide(client, login, capa_id, decision, phone, remark=None):

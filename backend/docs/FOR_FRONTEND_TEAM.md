@@ -12,8 +12,8 @@ Branch: `backend` · Folder: `backend/` · Live API docs (when running): **http:
 | 2. Sample data + mine-profile model | ✅ | 6 months of realistic data in the database (no new endpoints yet) |
 | 3. Mine profile, applicable obligations, tasks, map | ✅ | org tree, mines list/detail, mine profile, applicable obligations, tasks (list/summary/complete), calendar, compliance %, map boundaries + pins |
 | 4. Inspections, findings, CAPA, approvals | ✅ | checklists, inspections (start/findings/submit/list/detail), CAPA board (list/summary/detail/assign/"I fixed it"), approve/reject with two-person rule |
-| 5. Satya Proof, before/after closure, audit | ⏳ next | photo upload + trust score |
-| 6. Contractors, workers, attendance, fraud | ⏳ | |
+| 5. Satya Proof, before/after closure, audit | ✅ | photo upload + trust score with reasons, signed image links, automatic before/after closure checks, audit history + "Verify Chain" |
+| 6. Contractors, workers, attendance, fraud | ⏳ next | |
 | 7. Field reports, SOS, grievances, notifications, sync | ⏳ | |
 | 8. Reminders + escalation | ⏳ | |
 | 9. Dashboards, leaderboard, reports | ⏳ | |
@@ -160,7 +160,7 @@ daily production/dispatch and PM10/noise per mine, 25 grievances (many anonymous
 - `severity`: `low, medium, high, critical`
 - Task `status`: `pending, done, overdue`; CAPA `status`: `open, in_review, closed, rejected`
 - Grievance `status`: `new, in_progress, resolved, closed`; `category`: `wages, safety, harassment, facilities, leave`
-- Evidence `flags`: `outside_boundary, reused_photo, time_mismatch, no_exif, low_gps_accuracy, mock_location`
+- Evidence `flags`: `outside_boundary, no_location, reused_photo, time_mismatch, stale_photo, no_exif, gps_mismatch, low_gps_accuracy, mock_location` (meanings in the Module 5 section)
 - Photo `file_path` for seeded records is a placeholder (`seed/evidence_N.jpg`, no real image). Show a
   placeholder image until Module 5 serves real uploads.
 
@@ -172,7 +172,7 @@ daily production/dispatch and PM10/noise per mine, 25 grievances (many anonymous
    attendance spikes on 5 days with no gate entry, 3 workers paid ₹310/day (below the sample minimum ₹450).
 5. **Repeated "haul road spillage"** at Kusunda (6×) and Bastacolla (5×).
 6. **Ashoka OCP**: PM10 dust above 180 µg/m³ on 6 days (limit 100).
-7. **Moonidih UG**: one **rejected** CAPA closure (reused photo, 412 m away) and one **unacknowledged SOS**.
+7. **Moonidih UG**: one **rejected** CAPA closure (reused photo, 411 m away) and one **unacknowledged SOS**.
 8. Contractor licences: **Jharkhand Earthmovers** expires in 15 days, **Hazaribagh Contractors** already expired.
 
 ---
@@ -426,3 +426,117 @@ Tip: when the user taps **✗ Not OK** on an item, open Add Finding with `catego
 Closed CAPAs in the sample data carry an approval by the **Area GM** (remark "Verified, fix accepted."), so the
 history section of CAPA detail is filled. Current totals (seed 42): 56 open, 13 in review, ~830 closed, 1 rejected,
 23 overdue.
+
+---
+
+### Module 5: Satya Proof (photo trust) + before/after closure + tamper-proof history ✅
+
+#### Screens you can now connect
+| Screen | Endpoints |
+|---|---|
+| Mobile: every camera screen (task proof, finding photo, after-photo) | `POST /evidence` → use the returned `id` |
+| Trust badge / "why?" bottom sheet | `trust_score`, `trust_level`, `checks` from the upload response or `GET /evidence/{id}` |
+| Any `<img>` of a photo | the evidence `url` (signed, no header needed) |
+| Several photos in a list (inspection findings, tasks) | `GET /evidence?ids=1,2,3` |
+| CAPA detail: Before/After slider + closure checks | `GET /capa/{id}` → `before_photo`, `after_photo`, `closure_checks` |
+| Mobile: Close CAPA (distance meter) | `before_photo.lat/lng` from `GET /capa/{id}` |
+| Web: Audit & Integrity page | `GET /audit/verify`, `GET /audit/recent`, `GET /audit/{table}/{record_id}` |
+
+#### 1. Upload a photo: `POST /evidence` (multipart/form-data)
+| Field | Required | Notes |
+|---|---|---|
+| `file` | ✅ | JPEG, PNG or WebP, max 10 MB. **Take it in the app** (not from the gallery) so it has camera details |
+| `mine_id` | ✅ | the mine the photo belongs to (must be in the user's area) |
+| `lat`, `lng` | send both | GPS **at the moment of capture** |
+| `accuracy` | recommended | GPS accuracy in metres (`coords.accuracy`) |
+| `device_time` | recommended | when the photo was **taken**, ISO with timezone, e.g. `2026-09-26T10:15:00Z` |
+| `device_id` | optional | phone id |
+| `is_mocked` | recommended | `true` if Android reports a mock location (`location.mocked`) |
+| `client_uuid` | optional | offline retry: sending the same value again returns the same record (`200`) |
+
+Anyone logged in can upload for a mine in their area (workers too, e.g. attendance selfies).
+Response `201`:
+```json
+{
+  "id": 1883, "kind": "photo", "url": "/evidence/1883/file?sig=eyJ...",
+  "mine_id": 4, "lat": 23.7406, "lng": 86.348, "accuracy": 8.0,
+  "device_time": "2026-09-26T04:45:00", "server_time": "2026-09-26T04:45:02",
+  "device_id": "TEST-PHONE", "is_mocked": false,
+  "trust_score": 15, "trust_level": "suspicious",
+  "flags": ["outside_boundary", "low_gps_accuracy", "mock_location"],
+  "checks": [
+    {"name": "Inside the mine boundary", "passed": false, "penalty": 35, "detail": "Taken 2.3 km outside Moonidih UG."},
+    {"name": "GPS accuracy", "passed": false, "penalty": 10, "detail": "Location only precise to ±150 m (limit 50 m)."},
+    {"name": "No fake GPS", "passed": false, "penalty": 40, "detail": "The phone reported a mock-location (fake GPS) app."},
+    {"name": "Fresh photo (not reused)", "passed": true, "penalty": 0, "detail": "No match with any earlier photo."},
+    {"name": "Time check", "passed": true, "penalty": 0, "detail": "Phone time and photo time look right."},
+    {"name": "Camera details (EXIF)", "passed": true, "penalty": 0, "detail": "Real camera details found."}
+  ],
+  "exif": {"make": "Samsung", "model": "SM-A525F", "datetime_original": "2026:09:26 10:15:00"},
+  "sha256": "…", "uploaded_by": 7, "uploaded_by_name": "Ramesh Kumar (Safety Officer)",
+  "is_sample": false, "created_at": "2026-09-26T04:45:02"
+}
+```
+Errors: `413` too big · `415` not JPEG/PNG/WebP · `422` not an image / bad `device_time` / only one of lat,lng ·
+`403` mine outside the user's area.
+
+**Offline order on mobile:** upload the photo first (`POST /evidence`), then send the finding/task/closure with the
+returned `id`. Keep the photo's capture-time metadata; don't read GPS at sync time.
+
+#### 2. Trust score: show it like this
+- `trust_level`: `verified` (80–100, green ✓) · `review` (60–79, amber) · `suspicious` (< 60, red ⚠).
+- Show every **failed** item of `checks` with its `detail` sentence. The sentences are already written for users.
+- Penalties: fake GPS −40 · outside boundary −35 · no location −30 · exact reused photo −50 · look-alike photo −40 ·
+  stale photo −20 · photo-GPS mismatch −20 · time mismatch −15 · low GPS accuracy −10 · no camera details −10.
+- Flag meanings: `outside_boundary` taken outside the mine · `no_location` sent without GPS · `low_gps_accuracy`
+  worse than ±50 m · `mock_location` fake-GPS app · `reused_photo` same as / looks like an earlier photo ·
+  `time_mismatch` phone clock or photo time wrong · `stale_photo` taken > 7 days before upload ·
+  `no_exif` no camera details (screenshot?) · `gps_mismatch` GPS inside the photo ≠ phone GPS.
+- A photo taken offline and uploaded hours later is **fine** (as long as `device_time` is the capture time).
+
+#### 3. Showing images
+- Use `API_BASE + evidence.url` directly in `<img src>` / React Native `<Image source={{uri}}>`. It carries a
+  signed token valid for **12 hours**, so no Authorization header is needed. Refresh by calling `GET /evidence/{id}` again.
+- `GET /evidence/{id}/file` also accepts a normal `Authorization: Bearer` header.
+- Sample-data records (`is_sample: true`) return a grey **"Sample photo #N"** PNG placeholder.
+- `GET /evidence/{id}` → the object above. `GET /evidence?ids=12,15` → a list (records outside the area are skipped).
+
+#### 4. CAPA closure now runs Satya Proof automatically
+- `POST /capa/{id}/request-closure` with `{"evidence_id": <after-photo id>, "note": "..."}`.
+  **High and critical** problems need an after-photo (`422` without it); for low/medium it's optional.
+- The backend checks: **Same location** (within 30 m of the before-photo) · **Fresh photo (not reused)** ·
+  **Taken after the problem was reported** · **Trust score** (≥ 60) · optionally **AI: hazard no longer visible**
+  (appears when the ML teammate's model is plugged in).
+  - Any failure → `status: "rejected"` at once; `closure_checks` lists every check with `passed` + `detail`,
+    e.g. `{"name": "Same location", "passed": false, "detail": "411 m from the before-photo (limit 30 m)"}`.
+  - All passed → `status: "in_review"`; a second person approves as before (two-person rule).
+- `GET /capa/{id}` now also returns:
+```json
+"before_photo": {"id": 1881, "url": "/evidence/1881/file?sig=…", "lat": 23.7406, "lng": 86.348,
+                 "device_time": "…", "trust_score": 100, "trust_level": "verified", "flags": []},
+"after_photo":  {…same shape…, or null}
+```
+  Mobile distance meter: compare the live GPS with `before_photo.lat/lng` (or `finding.lat/lng` if no before-photo)
+  and show green within 30 m. The server decides in the end.
+- `closure_score` = trust score of the after-photo.
+
+#### 5. Audit & Integrity page (roles: `mine_manager, area_gm, subsidiary_admin, cil_admin, regulator`)
+- `GET /audit/verify` →
+```json
+{"ok": false, "chain_ok": true, "total_entries": 89, "head_hash": "7667448226f5…",
+ "broken_at": null, "records_checked": 40,
+ "records_changed_outside_app": [{"table_name": "capas", "record_id": 900,
+    "problem": "Record was changed outside the app.", "fields": ["closed_at", "status"]}],
+ "checked_at": "2026-09-26T04:50:00"}
+```
+  Big green shield when `ok` is true. When false: if `chain_ok` is false, show `broken_at`
+  (`{id, table_name, record_id, action, created_at, problem}`); list `records_changed_outside_app` with the fields.
+  `head_hash` = the fingerprint of the whole history ("chain seal"); show it shortened with a copy button.
+- `GET /audit/recent?table=&action=&user_id=&mine_id=&from=&to=&page=&page_size=` → paginated
+  `{id, table_name, record_id, action (create|update|delete|seed), user_id, user_name, mine_id, created_at, hash, prev_hash}`.
+- `GET /audit/{table_name}/{record_id}` (e.g. `/audit/capas/900`) → timeline, oldest first:
+  `[{id, action, user_id, user_name, created_at, changed_fields: ["status"], before: {"status": "open"}, data: {...full record...}, hash, prev_hash}]`.
+  Use `changed_fields` + `before` + `data` for the JSON diff viewer.
+  Table names: `capas, findings, inspections, compliance_tasks, mine_profiles, mine_obligations, obligations,
+  approvals, evidence, observations, grievances, contractors, workers, attendance, …`.
+- Only changes made **through the app** are recorded one by one. The sample data appears as one `seed` entry.

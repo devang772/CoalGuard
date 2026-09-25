@@ -21,6 +21,16 @@ class Settings(BaseSettings):
     # How long to wait for the ML engine before using the fallback matcher
     ml_timeout_seconds: float = 20.0
 
+    # Evidence uploads (Satya Proof)
+    upload_dir: str = "uploads"               # relative to the backend folder, or an absolute path
+    max_upload_mb: float = 10.0
+    gps_accuracy_limit_m: float = 50.0        # worse than this = "location not precise"
+    clock_skew_minutes: float = 10.0          # phone time vs real time / photo time
+    stale_photo_days: float = 7.0             # photo taken this long before upload = stale
+    similar_photo_distance: int = 5           # perceptual-hash bits; <= this = look-alike photo
+    closure_max_distance_m: float = 30.0      # after-photo must be this close to the before-photo
+    closure_min_trust: int = 60
+
     # Sample thresholds used by checks and alerts (replace with official values per state/notification)
     min_daily_wage: float = 450.0
     pm10_limit: float = 100.0

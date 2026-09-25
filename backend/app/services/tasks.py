@@ -1,7 +1,7 @@
 """Compliance task maker, overdue marker and compliance % calculation."""
 from datetime import date, timedelta
 
-from sqlalchemy import and_, delete, select, update
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from app.models import ComplianceTask, MineObligation, Obligation
@@ -67,10 +67,12 @@ def generate_tasks(db: Session, mine_ids: list[int] | None = None, today: date |
 def mark_overdue(db: Session, today: date | None = None) -> int:
     """Pending tasks whose due date has passed become overdue."""
     today = today or today_ist()
-    result = db.execute(update(ComplianceTask)
-                        .where(ComplianceTask.status == "pending", ComplianceTask.due_date < today)
-                        .values(status="overdue"))
-    return result.rowcount or 0
+    late = list(db.scalars(select(ComplianceTask).where(ComplianceTask.status == "pending",
+                                                        ComplianceTask.due_date < today)))
+    for task in late:                      # ORM updates, so each change is recorded in the audit chain
+        task.status = "overdue"
+    db.flush()
+    return len(late)
 
 
 def remove_future_tasks(db: Session, mine_id: int, obligation_ids: list[int], today: date | None = None) -> int:
@@ -78,10 +80,13 @@ def remove_future_tasks(db: Session, mine_id: int, obligation_ids: list[int], to
     if not obligation_ids:
         return 0
     today = today or today_ist()
-    result = db.execute(delete(ComplianceTask).where(
+    tasks = list(db.scalars(select(ComplianceTask).where(
         ComplianceTask.mine_id == mine_id, ComplianceTask.obligation_id.in_(obligation_ids),
-        ComplianceTask.due_date >= today, ComplianceTask.status != "done"))
-    return result.rowcount or 0
+        ComplianceTask.due_date >= today, ComplianceTask.status != "done")))
+    for task in tasks:                     # ORM deletes, so each removal is recorded in the audit chain
+        db.delete(task)
+    db.flush()
+    return len(tasks)
 
 
 def compliance_stats(db: Session, mine_ids: list[int], start: date, end: date) -> dict:

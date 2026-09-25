@@ -381,9 +381,22 @@ class ApprovalOut(ORMModel):
     created_at: datetime
 
 
+class EvidenceBrief(BaseModel):
+    id: int
+    url: str
+    lat: float | None
+    lng: float | None
+    device_time: datetime | None
+    trust_score: int | None
+    trust_level: str | None
+    flags: list[str]
+
+
 class CapaDetail(CapaOut):
     approvals: list[ApprovalOut]
     approvals_verified: bool
+    before_photo: EvidenceBrief | None = None
+    after_photo: EvidenceBrief | None = None
 
 
 class CapaSummary(BaseModel):

@@ -7,6 +7,9 @@ pydantic-settings>=2.4
 pyjwt>=2.9
 bcrypt>=4.2
 python-multipart>=0.0.9
+pillow>=10.4          # read photos + EXIF
+imagehash>=4.3        # look-alike photo fingerprint (perceptual hash)
+shapely>=2.0          # is a GPS point inside the mine boundary
 
 # testing
 pytest>=8.2

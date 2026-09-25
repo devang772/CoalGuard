@@ -248,6 +248,9 @@ class Evidence(TimestampMixin, Base):
     exif: Mapped[dict | None] = mapped_column(JSON)
     trust_score: Mapped[int | None] = mapped_column(Integer)
     flags: Mapped[list] = mapped_column(JSON, default=list)
+    checks: Mapped[list | None] = mapped_column(JSON)                    # [{name, passed, penalty, detail}]
+    content_type: Mapped[str | None] = mapped_column(String(50))
+    size_bytes: Mapped[int | None] = mapped_column(Integer)
     mine_id: Mapped[int | None] = mapped_column(ForeignKey("org_units.id"), index=True)
     uploaded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     client_uuid: Mapped[str | None] = mapped_column(String(64), unique=True)
@@ -414,8 +417,9 @@ class AuditLog(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     table_name: Mapped[str] = mapped_column(String(40), index=True)
     record_id: Mapped[int] = mapped_column(Integer, index=True)
-    action: Mapped[str] = mapped_column(String(10))                      # create / update / delete
+    action: Mapped[str] = mapped_column(String(10))                      # create / update / delete / seed
     user_id: Mapped[int | None] = mapped_column(Integer)
+    mine_id: Mapped[int | None] = mapped_column(Integer, index=True)     # for area-scoped history views
     data: Mapped[str] = mapped_column(Text)                              # canonical JSON text
     prev_hash: Mapped[str] = mapped_column(String(64))
     hash: Mapped[str] = mapped_column(String(64))

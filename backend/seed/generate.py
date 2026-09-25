@@ -40,6 +40,7 @@ from app.models import (Approval, Attendance, AuditLog, Capa, Checklist, Complia
                         User, Worker)
 from app.services.applicability import evaluate
 from app.services.approvals import GENESIS, approval_hash
+from app.services.audit import append_entries
 from app.utils import utcnow
 from seed import sample_data as S
 from seed.bootstrap import bootstrap
@@ -278,7 +279,7 @@ class Generator:
                 capa.update(status="rejected", after_evidence_id=after, closure_score=38.0,
                             closure_requested_by=capa["owner_id"], closure_requested_at=requested,
                             closure_note="Roof bolted and area dressed.", closure_checks=[
-                    {"name": "Same location", "passed": False, "detail": "412 m away from the before-photo (limit 30 m)"},
+                    {"name": "Same location", "passed": False, "detail": "411 m from the before-photo (limit 30 m)"},
                     {"name": "Fresh photo (not reused)", "passed": False,
                      "detail": "Matches a photo uploaded earlier at this mine"},
                     {"name": "Trust score", "passed": False, "detail": "38 (minimum 60)"}])
@@ -610,6 +611,10 @@ def generate(db: Session, days: int = 180, reset: bool = False, seed: int = 42) 
         reset_activity(db)
     counts = Generator(db, days, seed).run()
     fix_sequences(db)
+    # First link of the tamper-proof history: records that the sample data was created (bulk inserts are
+    # not recorded one by one). Every change made through the app after this is chained to it.
+    append_entries(db.connection(), [{"table_name": "system", "record_id": 0, "action": "seed", "user_id": None,
+                                      "mine_id": None, "data": {"days": days, "seed": seed, "counts": counts}}])
     db.commit()
     return counts
 

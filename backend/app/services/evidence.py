@@ -1,0 +1,102 @@
+"""Evidence locker: store uploaded photos, build safe download links, describe evidence for the API."""
+import io
+import uuid
+from datetime import timedelta
+from functools import lru_cache
+from pathlib import Path
+
+import jwt
+from PIL import Image, ImageDraw
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.config import settings
+from app.models import Evidence, User
+from app.services.proof import checks_from_flags, trust_level
+from app.utils import utcnow
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+EXTENSIONS = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}
+CONTENT_TYPES = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+LINK_HOURS = 12
+
+
+def upload_root() -> Path:
+    root = Path(settings.upload_dir)
+    return root if root.is_absolute() else BACKEND_DIR / root
+
+
+def save_file(data: bytes, image_format: str) -> str:
+    """Write the bytes under uploads/YYYY/MM/<random>.<ext>; return the path relative to the upload root."""
+    now = utcnow()
+    relative = f"{now:%Y}/{now:%m}/{uuid.uuid4().hex}.{EXTENSIONS[image_format]}"
+    target = upload_root() / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(data)
+    return relative
+
+
+def file_on_disk(evidence: Evidence) -> Path | None:
+    path = (upload_root() / evidence.file_path).resolve()
+    if upload_root().resolve() not in path.parents or not path.is_file():
+        return None
+    return path
+
+
+# ---------------------------------------------------------------- signed links (so <img src> works without headers)
+
+def signed_url(evidence_id: int) -> str:
+    token = jwt.encode({"evd": evidence_id, "exp": utcnow() + timedelta(hours=LINK_HOURS)},
+                       settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return f"/evidence/{evidence_id}/file?sig={token}"
+
+
+def link_is_valid(evidence_id: int, sig: str) -> bool:
+    try:
+        return jwt.decode(sig, settings.jwt_secret, algorithms=[settings.jwt_algorithm]).get("evd") == evidence_id
+    except jwt.PyJWTError:
+        return False
+
+
+@lru_cache(maxsize=64)
+def placeholder_png(evidence_id: int) -> bytes:
+    """Grey picture for sample-data records that have no real file."""
+    img = Image.new("RGB", (640, 480), (203, 213, 225))
+    draw = ImageDraw.Draw(img)
+    draw.rectangle((20, 20, 620, 460), outline=(100, 116, 139), width=4)
+    draw.text((240, 220), f"Sample photo #{evidence_id}", fill=(30, 41, 59))
+    draw.text((225, 245), "(no image file in sample data)", fill=(71, 85, 105))
+    out = io.BytesIO()
+    img.save(out, format="PNG")
+    return out.getvalue()
+
+
+# ---------------------------------------------------------------- API shape
+
+def evidence_out(db: Session, evidence: Evidence, names: dict[int, str] | None = None) -> dict:
+    if names is None:
+        names = dict(db.execute(select(User.id, User.name).where(User.id == evidence.uploaded_by)).all()) \
+            if evidence.uploaded_by else {}
+    return {
+        "id": evidence.id, "kind": evidence.kind, "url": signed_url(evidence.id),
+        "mine_id": evidence.mine_id, "lat": evidence.lat, "lng": evidence.lng, "accuracy": evidence.accuracy,
+        "device_time": evidence.device_time, "server_time": evidence.server_time,
+        "device_id": evidence.device_id, "is_mocked": evidence.is_mocked,
+        "trust_score": evidence.trust_score, "trust_level": trust_level(evidence.trust_score),
+        "flags": evidence.flags or [],
+        "checks": evidence.checks if evidence.checks is not None else checks_from_flags(evidence.flags),
+        "exif": evidence.exif or {}, "sha256": evidence.sha256,
+        "uploaded_by": evidence.uploaded_by, "uploaded_by_name": names.get(evidence.uploaded_by),
+        "is_sample": evidence.file_path.startswith("seed/"), "created_at": evidence.created_at,
+    }
+
+
+def evidence_brief(db: Session, evidence_id: int | None) -> dict | None:
+    """Short form used inside CAPA / task responses."""
+    if evidence_id is None:
+        return None
+    ev = db.get(Evidence, evidence_id)
+    if ev is None:
+        return None
+    return {"id": ev.id, "url": signed_url(ev.id), "lat": ev.lat, "lng": ev.lng, "device_time": ev.device_time,
+            "trust_score": ev.trust_score, "trust_level": trust_level(ev.trust_score), "flags": ev.flags or []}
