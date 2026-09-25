@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   Activity,
   AlertTriangle,
@@ -292,7 +292,14 @@ const quickActionMap: Record<string, string> = {
 };
 
 function CoalGuardDashboard() {
-  const { user, language, setLanguage } = useAppStore();
+  const navigate = useNavigate();
+  const { user, language, setLanguage, isAuthenticated, logoutUser } = useAppStore();
+
+  // Auth guard: redirect to login page if not authenticated
+  if (!isAuthenticated) {
+    navigate({ to: "/login" });
+    return null;
+  }
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [range, setRange] = useState("Today");
@@ -457,7 +464,7 @@ function CoalGuardDashboard() {
                       <ScrollText className="mr-2 size-4 text-primary" /> Security Audit Trail
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem className="text-rose-600 focus:text-rose-600 cursor-pointer" onClick={() => alert("Logged out successfully!")}>
+                    <DropdownMenuItem className="text-rose-600 focus:text-rose-600 cursor-pointer" onClick={() => { logoutUser(); navigate({ to: "/login" }); }}>
                       <LogOut className="mr-2 size-4" /> Logout Session
                     </DropdownMenuItem>
                   </DropdownMenuContent>

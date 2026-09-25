@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { setAuthToken } from "@/lib/api";
 
 export type UserRole =
   | "cil_admin"
@@ -7,7 +8,9 @@ export type UserRole =
   | "mine_manager"
   | "safety_officer"
   | "regulator"
-  | "contractor_admin";
+  | "contractor_admin"
+  | "supervisor"
+  | "worker";
 
 export interface UserSession {
   id: string;
@@ -30,7 +33,11 @@ export interface NotificationItem {
 
 export interface AppState {
   // Session & Auth
+  isAuthenticated: boolean;
+  accessToken: string | null;
   user: UserSession;
+  loginUser: (token: string, backendUser: BackendUser) => void;
+  logoutUser: () => void;
   setUserRole: (role: UserRole) => void;
 
   // Scope Hierarchy Switcher
@@ -59,7 +66,21 @@ export interface AppState {
   setAskNetraOpen: (open: boolean) => void;
 }
 
-const mockUsers: Record<UserRole, UserSession> = {
+/** Shape of the user object returned by the backend */
+export interface BackendUser {
+  id: number;
+  name: string;
+  phone: string;
+  role: string;
+  language: string;
+  org_unit_id: number;
+  org_name: string;
+  org_type: string;
+  mine_id: number | null;
+  mine_name: string | null;
+}
+
+const mockUsers: Record<string, UserSession> = {
   cil_admin: {
     id: "usr-01",
     name: "Shri Rajesh Verma",
@@ -148,9 +169,58 @@ const initialNotifications: NotificationItem[] = [
   },
 ];
 
+function backendUserToSession(bu: BackendUser): UserSession {
+  return {
+    id: String(bu.id),
+    name: bu.name,
+    role: bu.role as UserRole,
+    phone: bu.phone,
+    orgUnit: bu.org_name,
+    subsidiary: bu.org_type === "cil" ? "All Subsidiaries" : bu.org_name,
+  };
+}
+
+/** Read persisted auth from localStorage on load */
+function loadPersistedAuth(): { isAuthenticated: boolean; accessToken: string | null; user: UserSession } {
+  try {
+    const token = localStorage.getItem("coalguard_access_token");
+    const userJson = localStorage.getItem("coalguard_user");
+    if (token && userJson) {
+      const user = JSON.parse(userJson) as UserSession;
+      return { isAuthenticated: true, accessToken: token, user };
+    }
+  } catch {
+    // corrupt data — clear it
+    localStorage.removeItem("coalguard_access_token");
+    localStorage.removeItem("coalguard_user");
+  }
+  return { isAuthenticated: false, accessToken: null, user: mockUsers["cil_admin"] };
+}
+
+const persisted = loadPersistedAuth();
+
 export const useAppStore = create<AppState>((set, get) => ({
-  user: mockUsers["cil_admin"],
-  setUserRole: (role) => set({ user: mockUsers[role] }),
+  isAuthenticated: persisted.isAuthenticated,
+  accessToken: persisted.accessToken,
+  user: persisted.user,
+
+  loginUser: (token, backendUser) => {
+    const user = backendUserToSession(backendUser);
+    setAuthToken(token);
+    localStorage.setItem("coalguard_user", JSON.stringify(user));
+    set({ isAuthenticated: true, accessToken: token, user });
+  },
+
+  logoutUser: () => {
+    setAuthToken(null);
+    localStorage.removeItem("coalguard_user");
+    set({ isAuthenticated: false, accessToken: null, user: mockUsers["cil_admin"] });
+  },
+
+  setUserRole: (role) => {
+    const mock = mockUsers[role];
+    if (mock) set({ user: mock });
+  },
 
   selectedSubsidiary: "ALL",
   selectedArea: "ALL",
