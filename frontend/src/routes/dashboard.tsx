@@ -466,7 +466,7 @@ function CoalGuardDashboard() {
             </div>
           </header>
 
-          <section className="space-y-4 px-4 py-4 xl:px-6">
+          <section className="space-y-6 px-4 py-6 xl:px-8 max-w-[1700px] mx-auto">
             {activeTab === "Mines" && <MinesView />}
             {activeTab === "Inspections" && <InspectionsView />}
             {activeTab === "Compliance" && <ComplianceView />}
@@ -486,12 +486,14 @@ function CoalGuardDashboard() {
             {activeTab === "Audit Logs" && <AuditLogsView />}
 
             {activeTab === "Dashboard" && (
-              <>
-                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                  <div className="flex flex-wrap items-center gap-2">
+              <div className="space-y-6">
+                {/* Control Bar: Filters & Quick Actions */}
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                  {/* Filter Group */}
+                  <div className="flex flex-wrap items-center gap-2 p-2 bg-card border rounded-xl shadow-xs">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-2 bg-card">
+                        <Button variant="ghost" size="sm" className="gap-2 text-xs font-medium h-8 px-2.5">
                           <Filter className="size-3.5 text-muted-foreground" />
                           <span className="text-muted-foreground">Mine:</span> {selectedMine} <ChevronDown className="size-3 text-muted-foreground" />
                         </Button>
@@ -510,7 +512,7 @@ function CoalGuardDashboard() {
 
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-2 bg-card">
+                        <Button variant="ghost" size="sm" className="gap-2 text-xs font-medium h-8 px-2.5">
                           <Filter className="size-3.5 text-muted-foreground" />
                           <span className="text-muted-foreground">Risk Level:</span> {selectedRisk} <ChevronDown className="size-3 text-muted-foreground" />
                         </Button>
@@ -529,7 +531,7 @@ function CoalGuardDashboard() {
 
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-2 bg-card">
+                        <Button variant="ghost" size="sm" className="gap-2 text-xs font-medium h-8 px-2.5">
                           <Filter className="size-3.5 text-muted-foreground" />
                           <span className="text-muted-foreground">Compliance:</span> {selectedCompliance} <ChevronDown className="size-3 text-muted-foreground" />
                         </Button>
@@ -548,7 +550,7 @@ function CoalGuardDashboard() {
 
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-2 bg-card">
+                        <Button variant="ghost" size="sm" className="gap-2 text-xs font-medium h-8 px-2.5">
                           <Filter className="size-3.5 text-muted-foreground" />
                           <span className="text-muted-foreground">Status:</span> {selectedInspectionStatus} <ChevronDown className="size-3 text-muted-foreground" />
                         </Button>
@@ -567,7 +569,7 @@ function CoalGuardDashboard() {
 
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-2 bg-card">
+                        <Button variant="ghost" size="sm" className="gap-2 text-xs font-medium h-8 px-2.5">
                           <CalendarDays className="size-3.5 text-muted-foreground" />
                           <span className="text-muted-foreground">Date Range:</span> {range} <ChevronDown className="size-3 text-muted-foreground" />
                         </Button>
@@ -584,35 +586,37 @@ function CoalGuardDashboard() {
                       </DropdownMenuContent>
                     </DropdownMenu>
 
-                    <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground" onClick={resetFilters}>
+                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5" onClick={resetFilters}>
                       <RefreshCcw className="size-3.5" /> Reset Filters
                     </Button>
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
+                  {/* Quick Actions */}
+                  <div className="flex flex-wrap items-center gap-2.5">
                     {quickActions.map(({ label, icon: Icon }, index) => (
                       <Button
                         key={label}
                         size="sm"
                         variant={index === 0 ? "default" : "outline"}
-                        className="gap-2"
+                        className="gap-2 h-9 px-3.5 shadow-xs text-xs font-semibold cursor-pointer"
                         onClick={() => handleSelectTab(quickActionMap[label] || "Dashboard")}
                       >
-                        <Icon /> {label}
+                        <Icon className="size-3.5" /> {label}
                       </Button>
                     ))}
                   </div>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                {/* KPI Metrics */}
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
                   {kpis.map((kpi) => (
-                    <article key={kpi.label} className={cn("dashboard-card kpi-card", `kpi-${kpi.tone}`)}>
+                    <article key={kpi.label} className={cn("dashboard-card kpi-card p-4 sm:p-5", `kpi-${kpi.tone}`)}>
                       <div className="flex items-start justify-between gap-3">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{kpi.label}</p>
                         <CircleDot className="size-3 text-current" />
                       </div>
                       <div className="mt-3 flex items-end justify-between gap-2">
-                        <strong className="font-display text-3xl font-semibold leading-none">{kpi.value}</strong>
+                        <strong className="font-display text-3xl font-bold leading-none">{kpi.value}</strong>
                         <span className="text-xs font-medium text-muted-foreground">{kpi.note}</span>
                       </div>
                       {typeof kpi.progress === "number" && <ProgressBar value={kpi.progress} tone="safe" className="mt-3" />}
@@ -620,7 +624,8 @@ function CoalGuardDashboard() {
                   ))}
                 </div>
 
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
+                {/* Main Command Overview Grid */}
+                <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
                   <Panel title="Mine Health Overview" icon={Mountain} action="View all mines" onAction={() => handleSelectTab("Mines")}>
                     <div className="mb-3 flex flex-wrap items-center gap-2">
                       <div className="dashboard-search flex h-9 flex-1 items-center gap-2 rounded-lg border bg-background px-3">
@@ -987,7 +992,7 @@ function CoalGuardDashboard() {
                     ))}
                   </div>
                 </Panel>
-              </>
+              </div>
             )}
           </section>
           <AskNetraFloating />
@@ -1067,7 +1072,7 @@ function Panel({
           </Button>
         )}
       </div>
-      <div className="p-4">{children}</div>
+      <div className="p-5 sm:p-6">{children}</div>
     </section>
   );
 }
