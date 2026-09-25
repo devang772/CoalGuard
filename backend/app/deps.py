@@ -27,6 +27,16 @@ def resolve_mine_filter(db: Session, user: User, org_id: int | None, mine_id: in
     return ids
 
 
+def check_evidence(db: Session, evidence_id: int | None, mine_id: int) -> None:
+    """422 unless the evidence exists and belongs to this mine (or has no mine yet)."""
+    from app.models import Evidence
+    if evidence_id is None:
+        return
+    evidence = db.get(Evidence, evidence_id)
+    if evidence is None or (evidence.mine_id is not None and evidence.mine_id != mine_id):
+        raise HTTPException(status_code=422, detail="Evidence not found for this mine.")
+
+
 class Pagination:
     def __init__(self, page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200)):
         self.page = page

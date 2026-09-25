@@ -168,6 +168,8 @@ class Inspection(TimestampMixin, Base):
     lat: Mapped[float | None] = mapped_column(Float)
     lng: Mapped[float | None] = mapped_column(Float)
     status: Mapped[str] = mapped_column(String(15), default="in_progress")  # in_progress/submitted
+    checklist_answers: Mapped[list | None] = mapped_column(JSON)          # [{item_id, answer: ok/not_ok/na}]
+    notes: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime)
     client_uuid: Mapped[str | None] = mapped_column(String(64), unique=True)
@@ -199,9 +201,13 @@ class Capa(TimestampMixin, Base):
     mine_id: Mapped[int] = mapped_column(ForeignKey("org_units.id"), index=True)
     owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
     due_at: Mapped[datetime] = mapped_column(DateTime, index=True)
-    status: Mapped[str] = mapped_column(String(12), default="open", index=True)  # open/in_review/closed/rejected
+    # open -> in_review (fix submitted) -> closed (approved) or rejected (fix not accepted; must be redone)
+    status: Mapped[str] = mapped_column(String(12), default="open", index=True)
     escalation_level: Mapped[int] = mapped_column(Integer, default=0)
     last_escalated_at: Mapped[datetime | None] = mapped_column(DateTime)
+    closure_requested_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    closure_requested_at: Mapped[datetime | None] = mapped_column(DateTime)
+    closure_note: Mapped[str | None] = mapped_column(Text)
     after_evidence_id: Mapped[int | None] = mapped_column(ForeignKey("evidence.id"))
     closure_checks: Mapped[list | None] = mapped_column(JSON)             # [{name, passed, detail}]
     closure_score: Mapped[float | None] = mapped_column(Float)

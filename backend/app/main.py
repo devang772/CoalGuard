@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import models  # noqa: F401  (registers all tables on Base)
 from app.config import settings
 from app.db import Base, SessionLocal, engine
-from app.routers import auth, gis, health, mines, org, tasks
+from app.routers import approvals, auth, capa, gis, health, inspections, mines, org, tasks
 from app.services.tasks import generate_tasks, mark_overdue
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -50,3 +50,6 @@ app.include_router(org.router)
 app.include_router(mines.router)
 app.include_router(tasks.router)
 app.include_router(gis.router)
+app.include_router(inspections.router)
+app.include_router(capa.router)
+app.include_router(approvals.router)

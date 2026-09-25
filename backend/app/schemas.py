@@ -252,3 +252,164 @@ class ComplianceOut(BaseModel):
     overdue: int
     compliance_pct: float | None
     by_category: list[dict]
+
+
+# ---------------------------------------------------------------- checklists & inspections
+
+FINDING_CATEGORIES = Literal["roof", "haul_road", "conveyor", "electrical", "fire", "water", "dust", "ppe",
+                             "machinery", "explosives", "other"]
+SeverityLiteral = Literal["low", "medium", "high", "critical"]
+
+
+class ChecklistOut(ORMModel):
+    id: int
+    name: str
+    mine_type: str | None
+    items: list[dict]
+
+
+class ChecklistAnswer(BaseModel):
+    item_id: str = Field(max_length=40)
+    answer: Literal["ok", "not_ok", "na"]
+
+
+class InspectionCreate(BaseModel):
+    mine_id: int
+    type: Literal["internal", "statutory", "dgms", "spcb"] = "internal"
+    checklist_id: int | None = None
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lng: float | None = Field(default=None, ge=-180, le=180)
+    client_uuid: str | None = Field(default=None, max_length=64)
+
+
+class InspectionSubmit(BaseModel):
+    checklist_answers: list[ChecklistAnswer] = []
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class FindingCreate(BaseModel):
+    category: FINDING_CATEGORIES
+    description: str = Field(min_length=3, max_length=2000)
+    severity: SeverityLiteral
+    law_ref: str | None = Field(default=None, max_length=200)
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lng: float | None = Field(default=None, ge=-180, le=180)
+    photo_evidence_id: int | None = None
+    checklist_item_id: str | None = Field(default=None, max_length=40)
+    client_uuid: str | None = Field(default=None, max_length=64)
+
+
+class FindingOut(ORMModel):
+    id: int
+    inspection_id: int | None
+    mine_id: int
+    category: str
+    description: str
+    severity: str
+    law_ref: str | None
+    lat: float | None
+    lng: float | None
+    photo_evidence_id: int | None
+    checklist_item_id: str | None
+    created_at: datetime
+    capa_id: int | None = None
+    capa_status: str | None = None
+    capa_due_at: datetime | None = None
+
+
+class InspectionOut(BaseModel):
+    id: int
+    mine_id: int
+    mine_name: str
+    inspector_id: int
+    inspector_name: str
+    type: str
+    status: Literal["in_progress", "submitted"]
+    checklist_id: int | None
+    lat: float | None
+    lng: float | None
+    started_at: datetime
+    submitted_at: datetime | None
+    findings_count: int
+    critical_count: int
+
+
+class InspectionDetail(InspectionOut):
+    checklist_answers: list[dict] | None
+    notes: str | None
+    findings: list[FindingOut]
+
+
+# ---------------------------------------------------------------- CAPA & approvals
+
+class PersonOut(BaseModel):
+    id: int
+    name: str
+    role: str
+
+
+class CapaOut(BaseModel):
+    id: int
+    mine_id: int
+    mine_name: str
+    status: Literal["open", "in_review", "closed", "rejected"]
+    owner: PersonOut | None
+    due_at: datetime
+    overdue: bool
+    hours_left: float
+    escalation_level: int
+    finding: FindingOut
+    closure_requested_by: PersonOut | None
+    closure_requested_at: datetime | None
+    closure_note: str | None
+    after_evidence_id: int | None
+    closure_checks: list[dict] | None
+    closure_score: float | None
+    closed_at: datetime | None
+    created_at: datetime
+
+
+class ApprovalOut(ORMModel):
+    id: int
+    entity: str
+    entity_id: int
+    approver_id: int
+    approver_name: str | None = None
+    decision: Literal["approve", "reject"]
+    remark: str | None
+    hash: str
+    created_at: datetime
+
+
+class CapaDetail(CapaOut):
+    approvals: list[ApprovalOut]
+    approvals_verified: bool
+
+
+class CapaSummary(BaseModel):
+    by_status: dict[str, int]
+    overdue: int
+    open_by_severity: dict[str, int]
+    open_ageing: dict[str, int]
+
+
+class CapaAssign(BaseModel):
+    owner_id: int
+
+
+class CapaCloseRequest(BaseModel):
+    evidence_id: int | None = None
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class ApprovalCreate(BaseModel):
+    entity: Literal["capa"]
+    entity_id: int
+    decision: Literal["approve", "reject"]
+    remark: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def remark_needed_for_reject(self):
+        if self.decision == "reject" and not (self.remark and self.remark.strip()):
+            raise ValueError("A remark is required when rejecting")
+        return self

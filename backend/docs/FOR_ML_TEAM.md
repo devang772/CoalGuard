@@ -11,8 +11,9 @@ Branch: `backend` · Folder: `backend/` · Your code goes in `backend/app/ai/` a
 | 1. Foundation | ✅ | DB connection, `get_current_user`, `scope_mine_ids`, table names |
 | 2. Sample data + mine-profile model | ✅ | **Your training data** + the obligation-engine contract |
 | 3. Mine profile + obligations + tasks | ✅ | **Calls your `recommend_obligations(profile)`** and **your `predict_risk(db, mine_ids)`** (both optional; safe fallbacks) |
-| 4. Inspections, findings, CAPA | ⏳ next | more labelled findings/CAPAs through the API |
-| 5–9 | ⏳ | CAPA closure will call `verify_hazard_gone()` if present; dashboards reuse `predict_risk()` |
+| 4. Inspections, findings, CAPA | ✅ | findings/CAPAs now also created through the API; new CAPA columns; `approvals` table filled |
+| 5. Satya Proof + audit | ⏳ next | CAPA closure will call your `verify_hazard_gone()` if present |
+| 6–9 | ⏳ | dashboards reuse `predict_risk()` |
 
 ---
 
@@ -116,11 +117,11 @@ Output: list of dicts, one per applicable obligation:
 | Table | Rows (seed 42) | Notes for features |
 |---|---|---|
 | `compliance_tasks` | ~4,700 | `status` pending/done/overdue, `due_date`, `done_at`, `escalation_level` 0–3. Daily tasks only for the last 30 days; weekly+ for the full window |
-| `inspections` | ~650 | ~2 per mine per week; `type` internal/statutory/dgms/spcb |
-| `findings` | ~850 | `category`, `severity`, `description`, `created_at`, lat/lng |
-| `capas` | ~850 | one per finding; `due_at`, `status`, `closed_at`, `escalation_level` |
+| `inspections` | ~625 | ~2 per mine per week; `type` internal/statutory/dgms/spcb |
+| `findings` | ~900 | `category`, `severity`, `description`, `created_at`, lat/lng |
+| `capas` | ~900 | one per finding; `due_at`, `status`, `closed_at`, `escalation_level` |
 | `evidence` | ~1,900 | `trust_score` 20–98, `flags` list |
-| `observations` | ~550 | `type` unsafe_act/unsafe_condition/near_miss/incident/sos; ~20% `source='voice'`, `language='hi'`, Hindi `transcript` |
+| `observations` | ~330 | `type` unsafe_act/unsafe_condition/near_miss/incident/sos; ~20% `source='voice'`, `language='hi'`, Hindi `transcript` |
 | `workers` | 612 | `training_valid_till`, `medical_valid_till`, `device_id`, `bank_acc_hash`, `daily_wage` |
 | `attendance` | ~41,000 | last 90 days, Sundays off; `valid`, `reason`, `gate_entry`, `device_id` |
 | `production_logs` | 2,160 | daily `produced_t`, `dispatched_t` per mine |
@@ -212,3 +213,33 @@ With seed 42 it gives Kusunda OCP 100 (high); every other mine scores about 20�
 - Compliance % (backend definition): tasks done on or before their due date ÷ tasks that were due, grouped by the
   Indian calendar day (`app/services/tasks.py → compliance_stats`). With seed 42, Kusunda is ~50% and the others 73–88%.
 - `today` is always the Indian date (`app.utils.today_ist()`). Use `ist_date(ts)` to convert stored UTC timestamps.
+
+---
+
+### Module 4: Inspections → Findings → CAPA + Approvals ✅
+No new plug-in point in this module, but the data you train on changed a little. **Rebuild your local DB and
+re-seed** (the commands are in `backend/README.md`), because new columns were added.
+
+#### Table changes
+- **`inspections`**: new `checklist_answers` (JSON list `[{item_id, answer: ok|not_ok|na}]`, filled when an inspection
+  is submitted from the app; `null` in seeded data) and `notes`.
+- **`capas`**: new `closure_requested_by` (user id), `closure_requested_at`, `closure_note`.
+  Status meaning (important for features):
+  - `open`: work to do · `in_review`: fix submitted, waiting for a second person · `closed`: approved (`closed_at` set)
+  - `rejected`: the fix was not accepted, so the **work is still pending**. Treat it like `open` for "open/overdue CAPA" features.
+  - "Overdue CAPA" in the backend = status `open` or `rejected` **and** `due_at < now`.
+- **`approvals`** (now filled): `entity='capa'`, `entity_id` = CAPA id, `approver_id`, `decision` (`approve|reject`),
+  `remark`, `hash`, `created_at`. Seeded closed CAPAs have one approval by the area GM.
+  Possible feature: time from `closure_requested_at` to approval = the "review delay" per mine.
+- **`findings.checklist_item_id`** (e.g. `RS-2`) links a finding to the checklist item that failed (API-created
+  findings only). Checklist item texts are in the `checklists.items` JSON.
+
+#### How new findings and CAPAs arrive now
+Findings created through the app automatically get a CAPA: owner = the mine manager, `due_at = created_at + SLA`
+(critical 24 h, high 72 h, medium 168 h, low 360 h). So `due_at - created_at` always tells you the severity's SLA,
+and these rows look exactly like the seeded ones, meaning your models don't need a separate path for them.
+
+#### Data counts (seed 42, after the rebuild)
+~625 inspections, ~900 findings + CAPAs (≈56 open, 13 in review, ≈830 closed, 1 rejected; 23 overdue),
+~830 approvals, ~330 field reports. The Kusunda/monsoon/Bastacolla/ghost/spillage/PM10 patterns are unchanged,
+and Kusunda is still the only high-risk mine with the simple score.

@@ -39,6 +39,7 @@ from app.models import (Approval, Attendance, AuditLog, Capa, Checklist, Complia
                         MineProfile, Notification, Obligation, Observation, OrgUnit, ProductionLog, ReportLog,
                         User, Worker)
 from app.services.applicability import evaluate
+from app.services.approvals import GENESIS, approval_hash
 from app.utils import utcnow
 from seed import sample_data as S
 from seed.bootstrap import bootstrap
@@ -242,7 +243,7 @@ class Generator:
         return ids
 
     def inspections(self, checklist_ids: dict[str, int]) -> None:
-        insp_rows, finding_rows, capa_rows = [], [], []
+        insp_rows, finding_rows, capa_rows, approval_rows = [], [], [], []
 
         def make_inspection(mine, day, kind="internal"):
             iid = self.new_id("inspections")
@@ -251,7 +252,7 @@ class Generator:
             inspector = self.person(mine, self.rng.choice([Role.SAFETY_OFFICER, Role.SAFETY_OFFICER, Role.MINE_MANAGER]))
             insp_rows.append(dict(id=iid, mine_id=mine.id, inspector_id=inspector, type=kind,
                                   checklist_id=checklist_ids.get(mine.mine_type or "OC"), lat=lat, lng=lng,
-                                  status="submitted", started_at=started,
+                                  status="submitted", checklist_answers=None, notes=None, started_at=started,
                                   submitted_at=started + timedelta(hours=self.rng.uniform(1, 3)), created_at=started))
             return iid, started, inspector
 
@@ -266,14 +267,17 @@ class Generator:
                                      photo_evidence_id=photo, created_at=created))
             sla = timedelta(hours=self.sla_hours.get(severity, 168))
             due = created + sla
-            capa = dict(finding_id=fid, mine_id=mine.id, owner_id=self.person(mine, Role.MINE_MANAGER), due_at=due,
+            capa = dict(id=self.new_id("capas"), finding_id=fid, mine_id=mine.id, owner_id=self.person(mine, Role.MINE_MANAGER), due_at=due,
                         status="open", escalation_level=0, last_escalated_at=None, after_evidence_id=None,
+                        closure_requested_by=None, closure_requested_at=None, closure_note=None,
                         closure_checks=None, closure_score=None, closed_at=None, created_at=created)
             d = self.danger(mine, day)
             if closure == "rejected":
-                after = self.evidence(mine, self.now - timedelta(hours=5), capa["owner_id"], lat + 0.0037, lng,
-                                      flags=["reused_photo"])
-                capa.update(status="rejected", after_evidence_id=after, closure_score=38.0, closure_checks=[
+                requested = self.now - timedelta(hours=5)
+                after = self.evidence(mine, requested, capa["owner_id"], lat + 0.0037, lng, flags=["reused_photo"])
+                capa.update(status="rejected", after_evidence_id=after, closure_score=38.0,
+                            closure_requested_by=capa["owner_id"], closure_requested_at=requested,
+                            closure_note="Roof bolted and area dressed.", closure_checks=[
                     {"name": "Same location", "passed": False, "detail": "412 m away from the before-photo (limit 30 m)"},
                     {"name": "Fresh photo (not reused)", "passed": False,
                      "detail": "Matches a photo uploaded earlier at this mine"},
@@ -297,6 +301,14 @@ class Generator:
                 elif roll < 0.3:
                     self._close(capa, mine, min(created + sla * 0.2, self.now), lat, lng)
             capa_rows.append(capa)
+            approver = self.people.get((mine.parent_id, Role.AREA_GM))
+            if capa["status"] == "closed" and approver:
+                signed = capa["closed_at"].replace(microsecond=0)
+                remark = "Verified, fix accepted."
+                approval_rows.append(dict(entity="capa", entity_id=capa["id"], approver_id=approver,
+                                          decision="approve", remark=remark, created_at=signed,
+                                          hash=approval_hash("capa", capa["id"], approver, "approve", remark,
+                                                             signed, GENESIS)))
 
         for mine in self.mines:
             day = self.start
@@ -332,12 +344,16 @@ class Generator:
         self.bulk(Inspection, insp_rows)
         self.bulk(Finding, finding_rows)
         self.bulk(Capa, capa_rows)
+        self.bulk(Approval, approval_rows)
 
     def _close(self, capa: dict, mine: OrgUnit, when: datetime, lat: float, lng: float, status="closed") -> None:
         after = self.evidence(mine, when, capa["owner_id"], lat + 0.00008, lng + 0.00005)
         distance = self.rng.randint(4, 22)
         trust = next(e["trust_score"] for e in reversed(self.evidence_rows) if e["id"] == after)
         capa.update(status=status, after_evidence_id=after, closure_score=float(trust),
+                    closure_requested_by=capa["owner_id"],
+                    closure_requested_at=when - timedelta(hours=2) if status == "closed" else when,
+                    closure_note="Fixed and verified on site.",
                     closed_at=when if status == "closed" else None, closure_checks=[
                         {"name": "Same location", "passed": True, "detail": f"{distance} m from the before-photo"},
                         {"name": "Fresh photo (not reused)", "passed": True, "detail": "No match with older photos"},

@@ -9,7 +9,7 @@ Built with **FastAPI + PostgreSQL**.
 | 1 | Foundation: setup, all tables, login, roles, scope filter | ✅ Done |
 | 2 | Fake data generator + mine profile / applicable-obligation tables | ✅ Done |
 | 3 | Mine profile, applicable obligations, compliance tasks, map data | ✅ Done |
-| 4 | Inspections, findings, CAPA, approvals | ⏳ |
+| 4 | Inspections, findings, CAPA, approvals | ✅ Done |
 | 5 | Satya Proof, before/after closure, tamper-proof audit | ⏳ |
 | 6 | Contractors, workers, attendance, fraud rules | ⏳ |
 | 7 | Field reports, SOS, grievances, notifications, offline sync | ⏳ |
@@ -41,8 +41,8 @@ The same `--seed` always gives the same data, so everyone on the team sees ident
 Mines and users are kept on `--reset`. All generated data is **sample data**.
 
 Roughly created (180 days): 35 catalogue obligations, 12 mine profiles, ~330 mine-obligation links,
-~4,700 compliance tasks, ~650 inspections, ~850 findings + CAPAs, ~1,900 evidence records,
-~550 field reports (some Hindi voice), 15 contractors, 612 workers, ~41,000 attendance rows,
+~4,700 compliance tasks, ~625 inspections, ~900 findings + CAPAs, ~1,900 evidence records, ~830 approvals,
+~330 field reports (some Hindi voice), 15 contractors, 612 workers, ~41,000 attendance rows,
 daily production and PM10/noise readings, 25 grievances.
 
 **Planted patterns** (for the AI features and the demo):
@@ -110,6 +110,8 @@ app/
     tasks.py           # task maker, overdue marker, compliance %
     risk.py            # risk % per mine (ML model or simple score)
     mines.py           # mine summary numbers for lists and the map
+    capa.py            # CAPA creation from a finding (owner, deadline), closure-check hook
+    approvals.py       # tamper-evident approvals (hash chain per record)
   deps.py        # shared router helpers (mine-in-scope check, filters, pagination)
 seed/bootstrap.py  # org tree (CIL > 3 subsidiaries > 6 areas > 12 mines) + demo users + escalation rules
 seed/generate.py   # 6 months of sample activity with planted patterns
@@ -163,5 +165,14 @@ def recommend_obligations(profile: dict) -> list[dict]:
 | POST | `/tasks/generate` | create current-period tasks, mark overdue |
 | GET | `/gis/mines` | GeoJSON mine boundaries with status properties |
 | GET | `/gis/pins` | findings / observations / incidents / SOS pins |
+| GET | `/checklists?mine_id=` | inspection checklists that fit the mine |
+| POST | `/inspections` | start an inspection (regulators: DGMS/SPCB only) |
+| GET | `/inspections`, `/inspections/{id}` | list (paginated) / detail with findings |
+| POST | `/inspections/{id}/findings` | add a finding → CAPA created automatically |
+| POST | `/inspections/{id}/submit` | submit and lock the inspection |
+| GET | `/capa`, `/capa/summary`, `/capa/{id}` | CAPA board, Kanban counts, detail with approval history |
+| POST | `/capa/{id}/assign` | hand the CAPA to another person at the mine |
+| POST | `/capa/{id}/request-closure` | "I fixed it" → in review |
+| POST, GET | `/approvals` | approve / reject a fix (two-person rule), history |
 
 Full request/response details: [docs/FOR_FRONTEND_TEAM.md](docs/FOR_FRONTEND_TEAM.md).

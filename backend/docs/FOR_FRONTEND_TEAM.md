@@ -11,8 +11,8 @@ Branch: `backend` · Folder: `backend/` · Live API docs (when running): **http:
 | 1. Foundation (login, roles, scope) | ✅ | `POST /auth/login`, `GET /auth/me`, `GET /health` |
 | 2. Sample data + mine-profile model | ✅ | 6 months of realistic data in the database (no new endpoints yet) |
 | 3. Mine profile, applicable obligations, tasks, map | ✅ | org tree, mines list/detail, mine profile, applicable obligations, tasks (list/summary/complete), calendar, compliance %, map boundaries + pins |
-| 4. Inspections, findings, CAPA, approvals | ⏳ next | |
-| 5. Satya Proof, before/after closure, audit | ⏳ | |
+| 4. Inspections, findings, CAPA, approvals | ✅ | checklists, inspections (start/findings/submit/list/detail), CAPA board (list/summary/detail/assign/"I fixed it"), approve/reject with two-person rule |
+| 5. Satya Proof, before/after closure, audit | ⏳ next | photo upload + trust score |
 | 6. Contractors, workers, attendance, fraud | ⏳ | |
 | 7. Field reports, SOS, grievances, notifications, sync | ⏳ | |
 | 8. Reminders + escalation | ⏳ | |
@@ -149,8 +149,8 @@ and the `/ai/parse-rules` upload flow for end users.
 
 #### What sample data now exists (after `python -m seed.generate`)
 About 180 days ending today: ~4,700 compliance tasks (done / pending / overdue with escalation level 0–3),
-~650 inspections, ~850 findings each with a CAPA (open / in_review / closed / rejected), ~1,900 photo
-evidence records with trust scores and flags, ~550 field reports (near-miss, unsafe act/condition,
+~625 inspections, ~900 findings each with a CAPA (open / in_review / closed / rejected), ~1,900 photo
+evidence records with trust scores and flags, ~330 field reports (near-miss, unsafe act/condition,
 incident, SOS; ~20% Hindi voice with transcript), 15 contractors, 612 workers, ~41,000 attendance rows,
 daily production/dispatch and PM10/noise per mine, 25 grievances (many anonymous), a few notifications.
 
@@ -311,3 +311,118 @@ All endpoints are live in Swagger (`/docs`) and all of them respect the user's a
 #### Real numbers you'll see with the sample data (seed 42)
 Kusunda OCP is the only **high**-risk mine (100%, compliance ~50%). The others are low or medium (compliance 73–88%).
 Pins for the last 30 days: ~240 (3 SOS, ~180 findings, ~9 incidents, ~50 observations).
+
+---
+
+### Module 4: Inspections → Findings → CAPA + Approvals ✅
+
+#### Screens you can now connect
+| Screen | Endpoints |
+|---|---|
+| Mobile: Start Inspection (choose checklist) | `GET /checklists?mine_id=`, `POST /inspections` |
+| Mobile: Checklist + Add Finding | `POST /inspections/{id}/findings` |
+| Mobile: Review & Submit | `POST /inspections/{id}/submit` |
+| Web: Inspections list + detail | `GET /inspections`, `GET /inspections/{id}` |
+| Web: CAPA Board (Kanban + table) | `GET /capa`, `GET /capa/summary` |
+| Web + mobile: CAPA detail | `GET /capa/{id}` |
+| Web: reassign owner | `POST /capa/{id}/assign` |
+| Mobile: "I fixed it" (My CAPAs → Close) | `POST /capa/{id}/request-closure` |
+| Web: Approve / Reject buttons | `POST /approvals`, history via `GET /approvals?entity=capa&entity_id=` |
+
+#### The flow (and who can do what)
+```
+Start inspection ──► add findings ──► submit (locked)
+                         │
+                         └─► each finding automatically creates a CAPA
+                             owner = mine manager, deadline by severity
+                             (critical 24 h · high 72 h · medium 7 days · low 15 days)
+
+CAPA:  open ──"I fixed it"──► in_review ──approve──► closed
+         ▲                        │
+         └──── "I fixed it" ◄── rejected ◄──reject (remark required)
+```
+- **Who can inspect:** `supervisor, safety_officer, mine_manager, area_gm, subsidiary_admin, cil_admin, regulator`.
+  Regulators can only use `type` = `dgms` or `spcb`, and only in their region. Workers and contractor admins can't.
+- **Only the inspector** can add findings to or submit their own inspection. After submit → `409` on any change.
+- **"I fixed it"** (`request-closure`): `supervisor, safety_officer, mine_manager` of that mine, or the CAPA owner.
+  Allowed when the status is `open` or `rejected`.
+- **Approve / reject:** `mine_manager, area_gm, subsidiary_admin, cil_admin`, only for CAPAs `in_review`.
+  **Two-person rule:** whoever submitted the fix gets `403` if they try to approve or reject it themselves;
+  the `detail` message says why. Show it nicely ("Someone else must check your fix").
+- **Status `rejected`** means "the fix was not accepted; do it again". Show it in the **Rejected** column. The
+  owner can press "I fixed it" again. (In Module 5, Satya Proof can also set `rejected` automatically when the
+  after-photo fails the checks.)
+
+#### Checklists
+`GET /checklists?mine_id=4` → only checklists that fit the mine (UG / OC / both):
+```json
+[{"id": 3, "name": "Underground Roof Support Inspection", "mine_type": "UG",
+  "items": [{"id": "RS-1", "text": "Roof bolts installed as per support plan", "category": "roof"}]}]
+```
+Tip: when the user taps **✗ Not OK** on an item, open Add Finding with `category = item.category` and
+`checklist_item_id = item.id` pre-filled.
+
+#### Inspections
+- `POST /inspections` body `{"mine_id": 4, "type": "internal", "checklist_id": 3, "lat": 23.74, "lng": 86.35, "client_uuid": "..."}`
+  → `201` with the inspection detail (see below). Sending the same `client_uuid` again → `200` with the same inspection (offline retry).
+  `type` ∈ `internal | statutory | dgms | spcb`.
+- `POST /inspections/{id}/findings` body:
+```json
+{"category": "roof", "description": "Crack in roof near conveyor 3", "severity": "critical",
+ "law_ref": null, "lat": null, "lng": null, "photo_evidence_id": null,
+ "checklist_item_id": "RS-2", "client_uuid": "..."}
+```
+  `lat/lng` default to the inspection's location. `photo_evidence_id` must be an existing evidence id of that mine
+  (photo upload arrives in Module 5; until then send `null`). Response (`201`, or `200` for a `client_uuid` retry):
+```json
+{"id": 900, "inspection_id": 626, "mine_id": 4, "category": "roof", "description": "...", "severity": "critical",
+ "law_ref": null, "lat": 23.7406, "lng": 86.348, "photo_evidence_id": null, "checklist_item_id": "RS-2",
+ "created_at": "2026-09-25T19:37:16", "capa_id": 900, "capa_status": "open", "capa_due_at": "2026-09-26T19:37:16"}
+```
+  Categories: `roof, haul_road, conveyor, electrical, fire, water, dust, ppe, machinery, explosives, other`.
+- `POST /inspections/{id}/submit` body `{"checklist_answers": [{"item_id": "RS-2", "answer": "not_ok"}], "notes": "..."}`
+  (`answer` ∈ `ok | not_ok | na`).
+- `GET /inspections?org_id=&mine_id=&type=&status=in_progress|submitted&inspector=me&from=&to=&page=&page_size=` → paginated.
+  Item: `{id, mine_id, mine_name, inspector_id, inspector_name, type, status, checklist_id, lat, lng, started_at,
+  submitted_at, findings_count, critical_count}`. Newest first.
+- `GET /inspections/{id}` → the item + `checklist_answers`, `notes`, `findings: [finding objects as above]`.
+
+#### CAPA board
+- `GET /capa?org_id=&mine_id=&status=open,rejected&severity=high,critical&category=&owner=me&overdue=true&page=&page_size=`
+  → paginated. Order: overdue first, then open ones by deadline, then closed. Item:
+```json
+{
+  "id": 812, "mine_id": 4, "mine_name": "Moonidih UG", "status": "open",
+  "owner": {"id": 4, "name": "Vikram Mahato (Manager Moonidih)", "role": "mine_manager"},
+  "due_at": "2026-09-26T19:37:16", "overdue": false, "hours_left": 23.5, "escalation_level": 0,
+  "finding": { ...finding object... },
+  "closure_requested_by": null, "closure_requested_at": null, "closure_note": null,
+  "after_evidence_id": null, "closure_checks": null, "closure_score": null,
+  "closed_at": null, "created_at": "2026-09-25T19:37:16"
+}
+```
+  `hours_left` is negative when overdue → show "Overdue by 2 days". `escalation_level` 1–3 = escalated to
+  GM / subsidiary / CIL (the automatic escalation arrives in Module 8; seeded data already has levels).
+  `closure_checks` is filled by Satya Proof in Module 5 (`[{name, passed, detail}]`).
+- `GET /capa/summary` →
+  `{"by_status": {"open": 56, "in_review": 13, "closed": 830, "rejected": 1}, "overdue": 23,
+  "open_by_severity": {"low": 28, "medium": 19, "high": 21, "critical": 2}, "open_ageing": {"lt7": 36, "d7_30": 30, "gt30": 4}}`
+  → Kanban column counts, "Open CAPA ageing" chart (`lt7` < 7 days, `d7_30` 7–30 days, `gt30` > 30 days).
+- `GET /capa/{id}` → the item + `approvals: [{id, approver_id, approver_name, decision, remark, hash, created_at}]`
+  + `approvals_verified` (true = nobody edited the approval history; show a green shield, red if false).
+- `POST /capa/{id}/assign` body `{"owner_id": 7}` → new owner must be a supervisor / safety officer / manager
+  **of that mine** (else `422`). Roles: `mine_manager, area_gm, subsidiary_admin, cil_admin`.
+- `POST /capa/{id}/request-closure` body `{"evidence_id": null, "note": "Roof bolted"}` → returns the CAPA detail
+  with `status: "in_review"`.
+
+#### Approvals
+- `POST /approvals` body `{"entity": "capa", "entity_id": 812, "decision": "approve" | "reject", "remark": "..."}`
+  (`remark` required for reject) → `201`
+  `{"id", "entity", "entity_id", "approver_id", "approver_name", "decision", "remark", "hash", "created_at"}`.
+  Errors: `409` not in review · `403` two-person rule / role · `422` missing remark.
+- `GET /approvals?entity=capa&entity_id=812` → history, oldest first.
+
+#### Sample data
+Closed CAPAs in the sample data carry an approval by the **Area GM** (remark "Verified, fix accepted."), so the
+history section of CAPA detail is filled. Current totals (seed 42): 56 open, 13 in review, ~830 closed, 1 rejected,
+23 overdue.
