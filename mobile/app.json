@@ -1,37 +1,36 @@
 {
   "expo": {
-    "name": "CoalGuard Field Inspector",
-    "slug": "coalguard-mobile",
+    "name": "Netra Mobile",
+    "slug": "netra-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "coalguard",
+    "scheme": "netramobile",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0b1210"
+      "backgroundColor": "#1E293B"
     },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "CoalGuard requires camera access to capture evidence photos during field mine inspections.",
-        "NSLocationWhenInUseUsageDescription": "CoalGuard requires GPS location to tag hazard locations and mine inspection coordinates.",
-        "NSPhotoLibraryUsageDescription": "CoalGuard requires photo library access to attach existing site evidence photos."
+        "NSCameraUsageDescription": "Khanan Netra requires camera access for Satya Proof evidence capture.",
+        "NSLocationWhenInUseUsageDescription": "Khanan Netra requires GPS location to verify mine boundary geofences.",
+        "NSMicrophoneUsageDescription": "Khanan Netra requires microphone access for Speak-to-Report hazard dictation."
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0b1210"
+        "backgroundColor": "#1E293B"
       },
       "permissions": [
         "CAMERA",
+        "RECORD_AUDIO",
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "ACCESS_COARSE_LOCATION"
       ]
     },
     "web": {
@@ -42,24 +41,18 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow CoalGuard to access your camera for field hazard evidence capture."
+          "cameraPermission": "Allow Khanan Netra to access your camera for Satya Proof hazard evidence capture."
         }
       ],
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow CoalGuard to use your location for precise geospatial hazard mapping."
-        }
-      ],
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "Allow CoalGuard to access your photo library for attaching inspection evidence."
+          "locationAlwaysAndWhenInUsePermission": "Allow Khanan Netra to access location for geofence compliance."
         }
       ]
     ],
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": false
     }
   }
 }
