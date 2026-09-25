@@ -1,6 +1,6 @@
 """Photo evidence: upload (with Satya Proof trust checks), details, and the image file itself."""
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,8 +11,8 @@ from app.db import get_db
 from app.deps import get_mine_in_scope
 from app.models import Evidence, User
 from app.security import decode_access_token
-from app.services.evidence import (CONTENT_TYPES, EXTENSIONS, evidence_out, file_on_disk, link_is_valid,
-                                   placeholder_png, save_file)
+from app.services import storage
+from app.services.evidence import CONTENT_TYPES, EXTENSIONS, evidence_out, link_is_valid, placeholder_png, save_file
 from app.services.proof import InvalidImage, assess, parse_client_time, read_image
 from app.utils import utcnow
 
@@ -69,8 +69,12 @@ def upload_evidence(response: Response,
     if (lat is None) != (lng is None) or (lat is not None and not (-90 <= lat <= 90 and -180 <= lng <= 180)):
         raise HTTPException(status_code=422, detail="Send both lat and lng with valid values.")
 
+    try:
+        file_ref = save_file(data, info.format)
+    except storage.StorageError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
     now = utcnow()
-    evidence = Evidence(file_path=save_file(data, info.format), kind="photo", sha256=info.sha256, phash=info.phash,
+    evidence = Evidence(file_path=file_ref, kind="photo", sha256=info.sha256, phash=info.phash,
                         lat=lat, lng=lng, accuracy=accuracy, device_time=taken_at, server_time=now,
                         device_id=device_id, is_mocked=is_mocked, exif=info.exif, mine_id=mine_id,
                         uploaded_by=user.id, client_uuid=client_uuid, content_type=CONTENT_TYPES[info.format],
@@ -106,7 +110,9 @@ def get_evidence(evidence_id: int, user: User = Depends(get_current_user), db: S
             responses={200: {"content": {"image/jpeg": {}, "image/png": {}}}})
 def get_file(evidence_id: int, sig: str | None = Query(None, description="signed link from the evidence `url`"),
              token: str | None = Depends(optional_token), db: Session = Depends(get_db)):
-    """The image. Works with the signed `url` (no header needed) or with a normal Bearer token."""
+    """The image. Works with the signed `url` (no header needed) or with a normal Bearer token.
+    Local files are sent directly; Cloudinary files redirect (307) to a private download link that expires
+    after a few minutes. Sample-data records get a placeholder picture."""
     evidence = db.get(Evidence, evidence_id)
     if evidence is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence not found.")
@@ -120,7 +126,13 @@ def get_file(evidence_id: int, sig: str | None = Query(None, description="signed
         if user is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired login.")
         _load(db, user, evidence_id)
-    path = file_on_disk(evidence)
-    if path is None:
-        return Response(content=placeholder_png(evidence_id), media_type="image/png")
-    return FileResponse(path, media_type=evidence.content_type or "image/jpeg")
+    path = storage.local_path(evidence.file_path)
+    if path is not None:
+        return FileResponse(path, media_type=evidence.content_type or "image/jpeg")
+    if storage.is_cloud_ref(evidence.file_path):
+        try:
+            return RedirectResponse(storage.download_url(evidence.file_path), status_code=307)
+        except Exception:  # noqa: BLE001 - misconfigured / unreachable storage
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                                detail="The photo storage service is not reachable right now.")
+    return Response(content=placeholder_png(evidence_id), media_type="image/png")

@@ -398,3 +398,16 @@ re-alerts · unanswered-grievance count. In the seed data, Kusunda OCP has by fa
 
 #### If you write code that changes data
 Same rule as before: use ORM changes (not bulk statements), so the audit chain stays clean.
+
+---
+
+### Update: photos can now be stored on Cloudinary ✅
+`pip install -r requirements.txt` (adds the `cloudinary` SDK). With `STORAGE_BACKEND=cloudinary`, photo files are
+**not on the server's disk** any more: `evidence.file_path` then looks like
+`cloudinary:image:khanan-netra/evidence/2026/09/<uuid>.jpg`.
+- **Your `verify_hazard_gone(before_path, after_path, …)` still receives normal file paths.** The backend downloads
+  temporary copies from Cloudinary first (`app.services.evidence.file_on_disk(evidence)` does this for you).
+  A test proves the AI hook gets real copies of both photos.
+- If you need a photo elsewhere, call `app.services.storage.readable_copy(evidence.file_path)`. It returns a local
+  `Path` (a temporary copy for Cloudinary files), or `None` for sample-data rows. Don't build Cloudinary URLs yourself.
+- Uploads keep running Satya Proof **before** storage, so `phash`, `sha256`, `exif` and `trust_score` are filled as before.

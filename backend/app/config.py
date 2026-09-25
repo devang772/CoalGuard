@@ -26,6 +26,16 @@ class Settings(BaseSettings):
     # How long to wait for the ML engine before using the fallback matcher
     ml_timeout_seconds: float = 20.0
 
+    # File storage for photos and reports: "local" (the uploads folder) or "cloudinary"
+    storage_backend: str = "local"
+    # Either CLOUDINARY_URL=cloudinary://<api_key>:<api_secret>@<cloud_name> or the three values below
+    cloudinary_url: str | None = None
+    cloudinary_cloud_name: str | None = None
+    cloudinary_api_key: str | None = None
+    cloudinary_api_secret: str | None = None
+    cloudinary_folder: str = "khanan-netra"      # all files go under this folder in Cloudinary
+    cloudinary_link_minutes: int = 10            # how long a Cloudinary download link stays valid
+
     # Evidence uploads (Satya Proof)
     upload_dir: str = "uploads"               # relative to the backend folder, or an absolute path
     max_upload_mb: float = 10.0

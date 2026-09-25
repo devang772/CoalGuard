@@ -12,6 +12,7 @@ imagehash>=4.3        # look-alike photo fingerprint (perceptual hash)
 shapely>=2.0          # is a GPS point inside the mine boundary
 apscheduler>=3.10,<4  # timed jobs: reminders, escalations, nightly tasks
 tzdata>=2024.1        # Indian time zone data (needed on Windows)
+cloudinary>=1.40      # optional file storage (STORAGE_BACKEND=cloudinary)
 
 # testing
 pytest>=8.2

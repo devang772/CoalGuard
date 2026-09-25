@@ -1,6 +1,6 @@
-"""Evidence locker: store uploaded photos, build safe download links, describe evidence for the API."""
+"""Evidence locker: store uploaded photos (local folder or Cloudinary), build safe download links,
+describe evidence for the API."""
 import io
-import uuid
 from datetime import timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -12,35 +12,30 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import Evidence, User
+from app.services import storage
 from app.services.proof import checks_from_flags, trust_level
 from app.utils import utcnow
 
-BACKEND_DIR = Path(__file__).resolve().parents[2]
 EXTENSIONS = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}
 CONTENT_TYPES = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
 LINK_HOURS = 12
 
 
-def upload_root() -> Path:
-    root = Path(settings.upload_dir)
-    return root if root.is_absolute() else BACKEND_DIR / root
-
-
 def save_file(data: bytes, image_format: str) -> str:
-    """Write the bytes under uploads/YYYY/MM/<random>.<ext>; return the path relative to the upload root."""
-    now = utcnow()
-    relative = f"{now:%Y}/{now:%m}/{uuid.uuid4().hex}.{EXTENSIONS[image_format]}"
-    target = upload_root() / relative
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(data)
-    return relative
+    """Store the photo (local folder or Cloudinary, per STORAGE_BACKEND) and return its storage reference.
+    Raises storage.StorageError if the storage service is unavailable."""
+    return storage.save(data, EXTENSIONS[image_format], kind="evidence")
 
 
 def file_on_disk(evidence: Evidence) -> Path | None:
-    path = (upload_root() / evidence.file_path).resolve()
-    if upload_root().resolve() not in path.parents or not path.is_file():
-        return None
-    return path
+    """A readable file for this evidence (a temporary copy for cloud files), or None for sample data."""
+    return storage.readable_copy(evidence.file_path)
+
+
+def stored_in(evidence: Evidence) -> str:
+    if evidence.file_path.startswith("seed/"):
+        return "sample"
+    return "cloudinary" if storage.is_cloud_ref(evidence.file_path) else "local"
 
 
 # ---------------------------------------------------------------- signed links (so <img src> works without headers)
@@ -87,7 +82,8 @@ def evidence_out(db: Session, evidence: Evidence, names: dict[int, str] | None =
         "checks": evidence.checks if evidence.checks is not None else checks_from_flags(evidence.flags),
         "exif": evidence.exif or {}, "sha256": evidence.sha256,
         "uploaded_by": evidence.uploaded_by, "uploaded_by_name": names.get(evidence.uploaded_by),
-        "is_sample": evidence.file_path.startswith("seed/"), "created_at": evidence.created_at,
+        "is_sample": evidence.file_path.startswith("seed/"), "stored_in": stored_in(evidence),
+        "created_at": evidence.created_at,
     }
 
 

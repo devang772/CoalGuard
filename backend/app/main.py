@@ -11,7 +11,7 @@ from app.routers import (admin, approvals, attendance, audit, auth, capa, contra
                          inspections, mines, notifications, observations, org, sync, tasks)
 from app.services import audit as audit_chain  # noqa: F401  (registers the automatic history hook)
 from app.services import notify as live_push  # noqa: F401  (registers the push-after-commit hook)
-from app.services import scheduler
+from app.services import scheduler, storage
 from app.services.tasks import generate_tasks, mark_overdue
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -20,6 +20,7 @@ log = logging.getLogger("app")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    log.info("File storage: %s", storage.check_configuration())    # fails fast if Cloudinary is misconfigured
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         if settings.auto_bootstrap:

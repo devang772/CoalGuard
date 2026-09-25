@@ -856,3 +856,17 @@ Show it as a timeline: Level 1 = Area GM, 2 = Subsidiary, 3 = CIL. Seeded CAPAs 
 - **Demo mode:** the backend is started with `DEMO_TIME_SPEED=60`, so 1 real minute counts as 1 hour for deadlines.
   In the demo an unanswered SOS re-alerted the GM **live** after ~16 real seconds, and a critical CAPA reaches the GM
   after ~24 real minutes (or press "Run now" after that).
+
+---
+
+### Update: photos can now be stored on Cloudinary ✅
+**Nothing changes in your code.** Keep using the evidence `url` exactly as before (`/evidence/{id}/file?sig=…`).
+- When the backend runs with `STORAGE_BACKEND=cloudinary`, that URL answers with a **307 redirect** to a private
+  Cloudinary download link that expires after ~10 minutes. Browsers (`<img>`), React Native `<Image>`, `fetch` and
+  axios all follow redirects automatically.
+- Don't store or cache the Cloudinary link itself. Always use our `url` (valid 12 h) and refresh it with
+  `GET /evidence/{id}` when it expires.
+- New field on evidence objects: `"stored_in": "local" | "cloudinary" | "sample"` (for info or debugging only).
+- If Cloudinary is unreachable, `POST /evidence` returns `503` with
+  `"The photo storage service is not reachable right now. Please try again."`. Keep the photo in the offline
+  outbox and retry.

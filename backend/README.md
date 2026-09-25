@@ -91,9 +91,18 @@ Run inside the API process when `SCHEDULER_ENABLED=true` (only one process shoul
 nightly 00:05 IST (new tasks + overdue), reminders every 15 min, escalation every 5 min, digest 08:00 IST.
 Demo: start with `DEMO_TIME_SPEED=60` (1 real minute = 1 hour for deadlines) and use `POST /jobs/run?job=escalation`.
 
-## Photo uploads
-Photos are stored under `backend/uploads/YYYY/MM/` (set `UPLOAD_DIR` to change; the folder is git-ignored).
-Each upload is checked automatically (Satya Proof) and gets a trust score; see `app/services/proof.py`.
+## File storage (photos, and reports in Module 9): local folder or Cloudinary
+Every saved file goes through `app/services/storage.py`. Choose with `STORAGE_BACKEND`:
+- `local` (default): files under `backend/uploads/<kind>/YYYY/MM/` (`UPLOAD_DIR` to change; git-ignored).
+  Note: on hosts with a temporary disk (free Render/Railway/Heroku) local files vanish on redeploy, so use Cloudinary there.
+- `cloudinary`: set `STORAGE_BACKEND=cloudinary` and `CLOUDINARY_URL=cloudinary://<api_key>:<api_secret>@<cloud_name>`
+  (Cloudinary dashboard → "API environment variable"). Files go to the `CLOUDINARY_FOLDER` folder (default
+  `khanan-netra`) as **private** files: no public links. `GET /evidence/{id}/file` checks permissions and then
+  redirects (307) to a Cloudinary download link valid for `CLOUDINARY_LINK_MINUTES` (default 10).
+  The server refuses to start if Cloudinary is selected but the keys are missing.
+
+Each database record remembers where its file lives, so switching the setting later doesn't break older files.
+Each photo is checked (Satya Proof) **before** it is stored; see `app/services/proof.py`.
 
 ## Run tests
 ```bash
@@ -132,6 +141,7 @@ app/
     jobs.py            # nightly tasks, reminders, escalation ladder, morning digest
     scheduler.py       # APScheduler timetable (IST) + job status
     clock.py           # demo clock (DEMO_TIME_SPEED)
+    storage.py         # file storage: local folder or Cloudinary (private files, expiring links)
   deps.py        # shared router helpers (mine-in-scope check, filters, pagination)
 seed/bootstrap.py  # org tree (CIL > 3 subsidiaries > 6 areas > 12 mines) + demo users + escalation rules
 seed/generate.py   # 6 months of sample activity with planted patterns
