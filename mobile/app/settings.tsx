@@ -1,140 +1,189 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from "react-native";
-import { useRouter } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { ArrowLeft, Server, HardDrive, ShieldCheck, RefreshCw, Trash2 } from "lucide-react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { API_BASE_URL } from "../services/api";
-import { BrandHeader } from "../components/BrandHeader";
-import { AppCard } from "../components/ui/AppCard";
-import { AppInput } from "../components/ui/AppInput";
-import { AppButton } from "../components/ui/AppButton";
-import { COLORS, RADIUS, SPACING } from "../constants/theme";
+import React from 'react';
+import { View, Text, StyleSheet, ScrollView, Switch, TouchableOpacity } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
+import { useSettingsStore, LocationSimulation } from '../src/store/settings';
+import { useAuthStore } from '../src/store/auth';
+import { colors } from '../src/theme/colors';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const [apiUrl, setApiUrl] = useState(API_BASE_URL);
+  const {
+    themeMode,
+    setThemeMode,
+    fontSizeMode,
+    setFontSizeMode,
+    appLockEnabled,
+    setAppLockEnabled,
+    locationSimulation,
+    setLocationSimulation,
+    forceOffline,
+    setForceOffline,
+  } = useSettingsStore();
 
-  const handleClearCache = async () => {
-    try {
-      await AsyncStorage.clear();
-      Alert.alert("Cache Cleared", "Local storage and offline draft cache have been reset.");
-    } catch (error) {
-      Alert.alert("Error", "Could not clear local storage.");
-    }
-  };
+  const { selectedLanguage } = useAuthStore();
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <ArrowLeft size={20} color={COLORS.primary} />
-          <Text style={styles.backText}>Back</Text>
+    <ScrollView contentContainerStyle={styles.container}>
+      {/* Dev Simulator Card */}
+      <View style={[styles.card, { borderColor: colors.safetyAmber, borderWidth: 2 }]}>
+        <Text style={styles.devHeader}>⚡ SIH DEMO SIMULATION TOOLS</Text>
+
+        <Text style={styles.label}>Location Simulator (Geofence & Satya Test)</Text>
+        <View style={styles.simGrid}>
+          {(['inside', 'outside', 'mock_gps'] as LocationSimulation[]).map((sim) => (
+            <TouchableOpacity
+              key={sim}
+              style={[styles.simBtn, locationSimulation === sim && styles.simBtnActive]}
+              onPress={() => setLocationSimulation(sim)}
+            >
+              <Text style={[styles.simText, locationSimulation === sim && styles.simTextActive]}>
+                {sim.toUpperCase().replace('_', ' ')}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={styles.switchRow}>
+          <Text style={styles.switchLabel}>Simulate Force Offline (Test Outbox)</Text>
+          <Switch value={forceOffline} onValueChange={setForceOffline} trackColor={{ true: colors.danger }} />
+        </View>
+      </View>
+
+      {/* App Customizations */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>App Preferences</Text>
+
+        <TouchableOpacity style={styles.rowItem} onPress={() => router.push('/(auth)/language' as any)}>
+          <Text style={styles.rowLabel}>Language / भाषा</Text>
+          <Text style={styles.rowVal}>{selectedLanguage.toUpperCase()} →</Text>
         </TouchableOpacity>
 
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <BrandHeader subtitle="System Configuration" />
+        <View style={styles.switchRow}>
+          <Text style={styles.switchLabel}>High-Contrast Dark Mode (Underground)</Text>
+          <Switch
+            value={themeMode === 'dark'}
+            onValueChange={(val) => setThemeMode(val ? 'dark' : 'light')}
+            trackColor={{ true: colors.safetyAmber }}
+          />
+        </View>
 
-          <Text style={styles.title}>Mobile App Settings</Text>
+        <View style={styles.switchRow}>
+          <Text style={styles.switchLabel}>Large Text Size Mode</Text>
+          <Switch
+            value={fontSizeMode === 'large'}
+            onValueChange={(val) => setFontSizeMode(val ? 'large' : 'normal')}
+            trackColor={{ true: colors.safetyAmber }}
+          />
+        </View>
 
-          {/* Backend Connection */}
-          <AppCard variant="glass" style={styles.card}>
-            <Text style={styles.sectionLabel}>Backend Endpoint URL</Text>
-            <AppInput
-              label="EXPO_PUBLIC_API_URL"
-              value={apiUrl}
-              onChangeText={setApiUrl}
-              icon={<Server size={18} color={COLORS.primary} />}
-            />
-            <Text style={styles.subtext}>
-              Set to your local backend IP e.g. http://192.168.1.100:8000/api/v1 for testing.
-            </Text>
-          </AppCard>
-
-          {/* Storage & Offline Settings */}
-          <AppCard variant="glass" style={styles.card}>
-            <Text style={styles.sectionLabel}>Offline Cache Management</Text>
-            <View style={styles.row}>
-              <HardDrive size={18} color={COLORS.accent} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.rowTitle}>Clear Offline Cache</Text>
-                <Text style={styles.rowSub}>Reset pending queue and stored token data.</Text>
-              </View>
-            </View>
-
-            <AppButton
-              title="Clear Local Storage Cache"
-              variant="outline"
-              size="md"
-              icon={<Trash2 size={16} color={COLORS.destructive} />}
-              onPress={handleClearCache}
-              style={{ marginTop: 10, borderColor: COLORS.destructive }}
-              textStyle={{ color: COLORS.destructive }}
-            />
-          </AppCard>
-        </ScrollView>
+        <View style={styles.switchRow}>
+          <Text style={styles.switchLabel}>App Lock (Fingerprint / PIN)</Text>
+          <Switch value={appLockEnabled} onValueChange={setAppLockEnabled} trackColor={{ true: colors.safetyAmber }} />
+        </View>
       </View>
-    </SafeAreaView>
+
+      <TouchableOpacity style={styles.replayOnboarding} onPress={() => router.push('/(auth)/permissions' as any)}>
+        <Feather name="shield" size={18} color={colors.info} />
+        <Text style={styles.replayText}>Replay Permissions Onboarding</Text>
+      </TouchableOpacity>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
   container: {
-    flex: 1,
-    padding: SPACING.md,
-  },
-  backBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 10,
-  },
-  backText: {
-    color: COLORS.primary,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  scrollContent: {
-    paddingBottom: 40,
-  },
-  title: {
-    color: "#ffffff",
-    fontSize: 22,
-    fontWeight: "800",
-    marginVertical: 12,
+    padding: 16,
+    backgroundColor: '#F8FAFC',
   },
   card: {
-    marginBottom: SPACING.md,
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  sectionLabel: {
-    color: COLORS.textMuted,
-    fontSize: 10,
-    fontWeight: "700",
-    textTransform: "uppercase",
+  devHeader: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: colors.safetyAmberDark,
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.coalBlue,
+    marginBottom: 12,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.coalBlue,
     marginBottom: 8,
   },
-  subtext: {
-    color: COLORS.textMuted,
+  simGrid: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 14,
+  },
+  simBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+  },
+  simBtnActive: {
+    backgroundColor: colors.coalBlue,
+  },
+  simText: {
     fontSize: 11,
-    lineHeight: 15,
+    fontWeight: '800',
+    color: colors.coalBlue,
   },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 8,
+  simTextActive: {
+    color: colors.safetyAmber,
   },
-  rowTitle: {
-    color: "#ffffff",
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  switchLabel: {
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: '700',
+    color: colors.coalBlue,
   },
-  rowSub: {
-    color: COLORS.textMuted,
-    fontSize: 11,
+  rowItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  rowLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.coalBlue,
+  },
+  rowVal: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.info,
+  },
+  replayOnboarding: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 14,
+  },
+  replayText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.info,
   },
 });
