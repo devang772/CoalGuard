@@ -13,9 +13,80 @@ import {
   X,
   Upload,
   ChevronRight,
+  ShieldCheck,
+  MapPin,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { BeforeAfterSlider } from "@/components/common/BeforeAfterSlider";
+import { TrustScoreBadge } from "@/components/common/TrustScoreBadge";
+import { toast } from "sonner";
+
+interface CapaItem {
+  id: string;
+  findingTitle: string;
+  mineName: string;
+  owner: string;
+  dueCountdown: string;
+  overdue: boolean;
+  status: "Open" | "In Review" | "Closed" | "Rejected";
+  escalationLevel: "L1 Mine Mgr" | "L2 Area GM" | "L3 Subsidiary";
+  beforePhoto: string;
+  afterPhoto: string;
+  closureChecks: {
+    distanceMeters: number;
+    distancePassed: boolean;
+    reusedPhotoPassed: boolean;
+    trustScore: number;
+    trustScorePassed: boolean;
+    aiHazardGonePassed: boolean;
+  };
+}
+
+const mockCapas: CapaItem[] = [
+  {
+    id: "CAPA-881",
+    findingTitle: "Highwall Slope Tension Crack Bench 4",
+    mineName: "Kusunda Opencast Mine",
+    owner: "Er. Somnath Mukherjee",
+    dueCountdown: "Due in 4h",
+    overdue: false,
+    status: "In Review",
+    escalationLevel: "L1 Mine Mgr",
+    beforePhoto: "https://picsum.photos/seed/before1/600/400",
+    afterPhoto: "https://picsum.photos/seed/after1/600/400",
+    closureChecks: {
+      distanceMeters: 12,
+      distancePassed: true,
+      reusedPhotoPassed: true,
+      trustScore: 86,
+      trustScorePassed: true,
+      aiHazardGonePassed: true,
+    },
+  },
+  {
+    id: "CAPA-882",
+    findingTitle: "Water Sprayer Line Fracture at Loading Bay",
+    mineName: "Karkali Open Pit",
+    owner: "Er. N. Prasad",
+    dueCountdown: "Overdue 2 days",
+    overdue: true,
+    status: "In Review",
+    escalationLevel: "L3 Subsidiary",
+    beforePhoto: "https://picsum.photos/seed/before2/600/400",
+    afterPhoto: "https://picsum.photos/seed/after2/600/400",
+    closureChecks: {
+      distanceMeters: 412,
+      distancePassed: false,
+      reusedPhotoPassed: false,
+      trustScore: 48,
+      trustScorePassed: false,
+      aiHazardGonePassed: false,
+    },
+  },
+];
 
 const inspectionRecords = [
   {
@@ -54,75 +125,23 @@ const inspectionRecords = [
     tone: "low",
     summary: "Main winder motor and emergency braking system passed load test with zero defects.",
   },
-  {
-    id: "INS-2026-0888",
-    date: "18 Sep 2026",
-    mine: "Karkali Open Pit",
-    inspector: "Er. N. Prasad",
-    type: "Statutory DGMS Audit",
-    findings: "6 findings (Dust & Permits)",
-    risk: "Critical",
-    status: "Escalated",
-    tone: "critical",
-    summary: "Haul road dust suppression mist sprayers non-operational. Water permit renewal overdue by 12 days.",
-  },
-  {
-    id: "INS-2026-0887",
-    date: "17 Sep 2026",
-    mine: "Singrauli North Open Pit",
-    inspector: "Er. V. Mehta",
-    type: "Explosives & Blasting",
-    findings: "1 finding (Logbook gap)",
-    risk: "Medium",
-    status: "Completed",
-    tone: "medium",
-    summary: "Magazine storage security verified. Electronic detonator inventory logbook signed with 1 day lag.",
-  },
-  {
-    id: "INS-2026-0886",
-    date: "15 Sep 2026",
-    mine: "Raniganj South Seam",
-    inspector: "Er. Amit Sen",
-    type: "Ventilation & Airflow",
-    findings: "0 findings",
-    risk: "Low",
-    status: "Completed",
-    tone: "low",
-    summary: "Airflow volume at working face measured at 520 m³/min (well above DGMS 350 m³/min standard).",
-  },
 ];
 
 export function InspectionsView() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [typeFilter, setTypeFilter] = useState("All");
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"inspections" | "capa">("capa");
+  const [selectedCapa, setSelectedCapa] = useState<CapaItem | null>(mockCapas[0]);
   const [selectedRecord, setSelectedRecord] = useState<(typeof inspectionRecords)[0] | null>(null);
 
-  // New Inspection Form state
-  const [formData, setFormData] = useState({
-    mine: "Jharia Underground Coal Mine",
-    type: "Safety & Gas Audit",
-    inspector: "Er. A. Kumar",
-    date: "2026-09-23",
-    priority: "Medium",
-    notes: "",
-  });
+  const handleApproveClosure = (capaId: string) => {
+    toast.success(`CAPA ${capaId} Approved & Closed!`, {
+      description: "Satya Proof verification passed. Closed timestamp recorded into audit ledger.",
+    });
+  };
 
-  const filteredRecords = inspectionRecords.filter((rec) => {
-    const matchesSearch =
-      rec.mine.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      rec.inspector.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      rec.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "All" || rec.status === statusFilter;
-    const matchesType = typeFilter === "All" || rec.type.includes(typeFilter);
-    return matchesSearch && matchesStatus && matchesType;
-  });
-
-  const handleCreateInspection = (e: React.FormEvent) => {
-    e.preventDefault();
-    alert("New inspection scheduled successfully!");
-    setIsModalOpen(false);
+  const handleRejectClosure = (capaId: string) => {
+    toast.error(`CAPA ${capaId} Closure Rejected`, {
+      description: "Distance mismatch & low trust score. Escalated to Area GM.",
+    });
   };
 
   return (
@@ -130,289 +149,196 @@ export function InspectionsView() {
       {/* Top Header */}
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
-          <h2 className="font-display text-2xl font-bold tracking-tight">Safety & Statutory Inspections</h2>
+          <h2 className="font-display text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            Inspections & CAPA Satya Proof Board
+            <ShieldCheck size={22} className="text-amber-500" />
+          </h2>
           <p className="text-sm text-muted-foreground">
-            Schedule, manage and audit safety inspections across all active mine faces and processing facilities.
+            Field inspection findings, automatic CAPA ticketing, and Before/After "Satya Proof" closure verification.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={() => setIsModalOpen(true)} className="gap-2">
-            <Plus className="size-4" /> Schedule New Inspection
+          <Button
+            onClick={() => setActiveTab("capa")}
+            variant={activeTab === "capa" ? "default" : "outline"}
+            className="gap-2"
+          >
+            <ShieldCheck size={15} /> CAPA Board (Satya Proof)
+          </Button>
+          <Button
+            onClick={() => setActiveTab("inspections")}
+            variant={activeTab === "inspections" ? "default" : "outline"}
+            className="gap-2"
+          >
+            <ClipboardCheck size={15} /> Inspections List
           </Button>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="dashboard-card p-4">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold uppercase tracking-wider">Completed (This Month)</span>
-            <CheckCircle className="size-4 text-emerald-500" />
-          </div>
-          <p className="mt-2 font-display text-3xl font-bold text-emerald-600">42</p>
-          <p className="mt-1 text-xs text-muted-foreground">100% verified by Safety Officer</p>
-        </div>
-        <div className="dashboard-card p-4">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold uppercase tracking-wider">Active & Scheduled</span>
-            <Clock className="size-4 text-primary" />
-          </div>
-          <p className="mt-2 font-display text-3xl font-bold text-primary">18</p>
-          <p className="mt-1 text-xs text-muted-foreground">6 audits in progress</p>
-        </div>
-        <div className="dashboard-card p-4">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold uppercase tracking-wider">Overdue Audits</span>
-            <AlertTriangle className="size-4 text-amber-500" />
-          </div>
-          <p className="mt-2 font-display text-3xl font-bold text-amber-600">07</p>
-          <p className="mt-1 text-xs text-amber-600 font-medium">Requires immediate assignment</p>
-        </div>
-        <div className="dashboard-card p-4">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold uppercase tracking-wider">High-Risk Findings</span>
-            <AlertTriangle className="size-4 text-rose-500" />
-          </div>
-          <p className="mt-2 font-display text-3xl font-bold text-rose-600">11</p>
-          <p className="mt-1 text-xs text-rose-600 font-medium">Corrective actions dispatched</p>
-        </div>
-      </div>
-
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search by ID, mine name or inspector..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full rounded-md border bg-background pl-9 pr-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary"
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2">
-            <Filter className="size-4 text-muted-foreground" />
-            <span className="text-xs font-medium text-muted-foreground">Status:</span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-md border bg-background px-2 py-1.5 text-xs font-medium outline-none focus:border-primary"
-            >
-              <option value="All">All Statuses</option>
-              <option value="Completed">Completed</option>
-              <option value="Review Required">Review Required</option>
-              <option value="Escalated">Escalated</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground">Category:</span>
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="rounded-md border bg-background px-2 py-1.5 text-xs font-medium outline-none focus:border-primary"
-            >
-              <option value="All">All Categories</option>
-              <option value="Safety">Safety & Gas</option>
-              <option value="Stability">Ground Stability</option>
-              <option value="Machinery">Machinery & Electrical</option>
-              <option value="DGMS">Statutory DGMS</option>
-              <option value="Ventilation">Ventilation</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Inspection Table */}
-      <div className="dashboard-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="dashboard-table min-w-full">
-            <thead>
-              <tr>
-                <th>Inspection ID</th>
-                <th>Mine Site</th>
-                <th>Inspection Type</th>
-                <th>Lead Inspector</th>
-                <th>Date</th>
-                <th>Findings</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRecords.map((rec) => (
-                <tr key={rec.id} className="hover:bg-muted/30">
-                  <td className="font-mono text-xs font-bold text-primary">{rec.id}</td>
-                  <td className="font-medium">{rec.mine}</td>
-                  <td>{rec.type}</td>
-                  <td className="text-muted-foreground">{rec.inspector}</td>
-                  <td className="text-xs text-muted-foreground">{rec.date}</td>
-                  <td>
-                    <span className="text-xs font-semibold">{rec.findings}</span>
-                  </td>
-                  <td>
-                    <span className={cn("status-badge", `status-${rec.tone}`)}>{rec.status}</span>
-                  </td>
-                  <td>
-                    <Button variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => setSelectedRecord(rec)}>
-                      View Log <ChevronRight className="size-3" />
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Log Detail Dialog */}
-      {selectedRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="dashboard-card max-h-[90vh] w-full max-w-xl overflow-y-auto bg-card p-6 shadow-2xl">
-            <div className="flex items-start justify-between border-b pb-4">
-              <div>
-                <span className="font-mono text-xs font-bold text-primary">{selectedRecord.id}</span>
-                <h3 className="font-display text-lg font-bold">{selectedRecord.mine}</h3>
-                <p className="text-xs text-muted-foreground">{selectedRecord.type} · Inspected by {selectedRecord.inspector}</p>
-              </div>
-              <Button variant="ghost" size="icon" onClick={() => setSelectedRecord(null)}>
-                <X className="size-4" />
-              </Button>
-            </div>
-
-            <div className="mt-4 space-y-4 text-sm">
-              <div className="flex items-center justify-between rounded-lg bg-muted/40 p-3">
-                <div>
-                  <p className="text-xs text-muted-foreground">Inspection Date</p>
-                  <p className="font-semibold">{selectedRecord.date}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Risk Rating</p>
-                  <span className={cn("status-badge", `status-${selectedRecord.tone}`)}>{selectedRecord.risk}</span>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Current Status</p>
-                  <p className="font-semibold">{selectedRecord.status}</p>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-1">Inspector Executive Summary</h4>
-                <p className="rounded-md border p-3 text-sm text-foreground bg-background">{selectedRecord.summary}</p>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-1">Key Findings</h4>
-                <p className="text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 p-2.5 rounded-md">
-                  {selectedRecord.findings}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-6 flex justify-end gap-2 border-t pt-4">
-              <Button variant="outline" onClick={() => setSelectedRecord(null)}>Close</Button>
-              <Button className="gap-2"><FileText className="size-4" /> Export Report PDF</Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Schedule Inspection Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="dashboard-card w-full max-w-lg bg-card p-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="font-display text-lg font-bold">Schedule New Safety Inspection</h3>
-              <Button variant="ghost" size="icon" onClick={() => setIsModalOpen(false)}>
-                <X className="size-4" />
-              </Button>
-            </div>
-
-            <form onSubmit={handleCreateInspection} className="mt-4 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-muted-foreground mb-1">Select Mine Site</label>
-                <select
-                  value={formData.mine}
-                  onChange={(e) => setFormData({ ...formData, mine: e.target.value })}
-                  className="w-full rounded-md border bg-background p-2 text-sm outline-none focus:border-primary"
-                >
-                  <option value="Jharia Underground Coal Mine">Jharia Underground Coal Mine</option>
-                  <option value="Kusunda Opencast Mine">Kusunda Opencast Mine</option>
-                  <option value="Moonidih Shaft & Washery">Moonidih Shaft & Washery</option>
-                  <option value="Karkali Open Pit">Karkali Open Pit</option>
-                  <option value="Singrauli North Open Pit">Singrauli North Open Pit</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground mb-1">Inspection Category</label>
-                  <select
-                    value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                    className="w-full rounded-md border bg-background p-2 text-sm outline-none focus:border-primary"
+      {activeTab === "capa" && (
+        <div className="space-y-6">
+          {/* Kanban / Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {mockCapas.map((capa) => (
+              <div
+                key={capa.id}
+                onClick={() => setSelectedCapa(capa)}
+                className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                  selectedCapa?.id === capa.id
+                    ? "bg-card border-amber-500 shadow-md ring-1 ring-amber-500/30"
+                    : "bg-card/80 border-border hover:border-slate-300 dark:hover:border-slate-700"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-muted text-amber-700 dark:text-amber-400 border font-medium">
+                    {capa.id}
+                  </span>
+                  <span
+                    className={`text-[11px] font-mono px-2 py-0.5 rounded-full ${
+                      capa.overdue
+                        ? "bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/40"
+                        : "bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/40"
+                    }`}
                   >
-                    <option value="Safety & Gas Audit">Safety & Gas Audit</option>
-                    <option value="Ground Stability & Slope">Ground Stability & Slope</option>
-                    <option value="Machinery & Electrical">Machinery & Electrical</option>
-                    <option value="Statutory DGMS Audit">Statutory DGMS Audit</option>
-                    <option value="Ventilation & Airflow">Ventilation & Airflow</option>
-                  </select>
+                    {capa.dueCountdown}
+                  </span>
                 </div>
+
+                <h3 className="font-display font-semibold text-sm text-foreground mt-2">{capa.findingTitle}</h3>
+                <p className="text-xs text-muted-foreground mt-1">{capa.mineName} · Owner: {capa.owner}</p>
+
+                <div className="mt-3 pt-3 border-t flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Escalation: <strong className="text-amber-600 dark:text-amber-300">{capa.escalationLevel}</strong></span>
+                  <TrustScoreBadge score={capa.closureChecks.trustScore} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* CAPA Detail & Satya Proof Slider Section */}
+          {selectedCapa && (
+            <div className="bg-card border rounded-2xl p-6 space-y-6 shadow-sm">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b pb-4">
                 <div>
-                  <label className="block text-xs font-semibold text-muted-foreground mb-1">Lead Inspector</label>
-                  <input
-                    type="text"
-                    value={formData.inspector}
-                    onChange={(e) => setFormData({ ...formData, inspector: e.target.value })}
-                    className="w-full rounded-md border bg-background p-2 text-sm outline-none focus:border-primary"
-                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono text-amber-700 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950 px-2 py-0.5 rounded border border-amber-300 dark:border-amber-500/40">
+                      {selectedCapa.id}
+                    </span>
+                    <h3 className="font-display text-lg font-bold text-foreground">{selectedCapa.findingTitle}</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {selectedCapa.mineName} | Escalation Stage: <strong className="text-amber-600 dark:text-amber-300">{selectedCapa.escalationLevel}</strong>
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <TrustScoreBadge score={selectedCapa.closureChecks.trustScore} flags={selectedCapa.closureChecks.distancePassed ? [] : ["outside_boundary", "reused_photo"]} />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground mb-1">Scheduled Date</label>
-                  <input
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="w-full rounded-md border bg-background p-2 text-sm outline-none focus:border-primary"
-                  />
+              {/* Before / After Draggable Slider Component */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs text-foreground font-medium">
+                  <span className="flex items-center gap-1.5"><ShieldCheck size={14} className="text-amber-500" /> Interactive Satya Proof Before/After Comparison</span>
+                  <span className="text-muted-foreground">Drag middle slider handle horizontally</span>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground mb-1">Priority</label>
-                  <select
-                    value={formData.priority}
-                    onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                    className="w-full rounded-md border bg-background p-2 text-sm outline-none focus:border-primary"
-                  >
-                    <option value="Low">Low</option>
-                    <option value="Medium">Medium</option>
-                    <option value="High">High</option>
-                    <option value="Critical">Critical</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-muted-foreground mb-1">Scope & Focus Notes</label>
-                <textarea
-                  rows={3}
-                  placeholder="Specify focus areas, Seam depth, or specific DGMS circular requirements..."
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full rounded-md border bg-background p-2 text-sm outline-none focus:border-primary"
+                <BeforeAfterSlider
+                  beforeImage={selectedCapa.beforePhoto}
+                  afterImage={selectedCapa.afterPhoto}
+                  beforeLabel="Before Hazard (Recorded 14 Sep)"
+                  afterLabel="After Remediation (Recorded 21 Sep)"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 border-t pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">Submit Schedule</Button>
+              {/* Satya Proof Checklist Verification Panel */}
+              <div className="bg-muted/30 border rounded-xl p-4 space-y-3">
+                <h4 className="font-mono text-xs text-amber-600 dark:text-amber-400 uppercase tracking-wider font-bold">
+                  Satya Proof Automated Integrity Checks:
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-card border">
+                    {selectedCapa.closureChecks.distancePassed ? (
+                      <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                    ) : (
+                      <XCircle size={16} className="text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                    )}
+                    <div>
+                      <div className="font-semibold text-foreground">GPS Proximity Distance Check</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {selectedCapa.closureChecks.distancePassed
+                          ? `Within 30m threshold (${selectedCapa.closureChecks.distanceMeters}m from hazard) ✅`
+                          : `FAILED: Distance ${selectedCapa.closureChecks.distanceMeters}m exceeds 30m boundary ❌`}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-card border">
+                    {selectedCapa.closureChecks.reusedPhotoPassed ? (
+                      <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                    ) : (
+                      <XCircle size={16} className="text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                    )}
+                    <div>
+                      <div className="font-semibold text-foreground">Photo Reuse Anti-Fraud Check</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {selectedCapa.closureChecks.reusedPhotoPassed
+                          ? "Unique photo hash verified. Not reused ✅"
+                          : "FAILED: Photo matches uploaded inspection from 12 Aug ❌"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </form>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleRejectClosure(selectedCapa.id)}
+                  className="border-rose-300 dark:border-rose-500/50 text-rose-600 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950 text-xs"
+                >
+                  Reject Closure
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => handleApproveClosure(selectedCapa.id)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1.5 shadow-sm"
+                >
+                  <CheckCircle2 size={15} /> Approve & Close CAPA
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "inspections" && (
+        <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-foreground">
+              <thead className="bg-muted/50 text-muted-foreground font-mono text-[11px] uppercase border-b">
+                <tr>
+                  <th className="p-3">ID</th>
+                  <th className="p-3">Mine</th>
+                  <th className="p-3">Category</th>
+                  <th className="p-3">Inspector</th>
+                  <th className="p-3">Date</th>
+                  <th className="p-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {inspectionRecords.map((rec) => (
+                  <tr key={rec.id} className="hover:bg-muted/30">
+                    <td className="p-3 font-mono font-bold text-amber-600 dark:text-amber-400">{rec.id}</td>
+                    <td className="p-3 font-semibold text-foreground">{rec.mine}</td>
+                    <td className="p-3 text-foreground">{rec.type}</td>
+                    <td className="p-3 text-muted-foreground">{rec.inspector}</td>
+                    <td className="p-3 font-mono text-muted-foreground">{rec.date}</td>
+                    <td className="p-3"><span className="px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/40 font-medium">{rec.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

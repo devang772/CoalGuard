@@ -272,8 +272,8 @@ function CoalGuard() {
           <Link to="/dashboard">Dashboard</Link>
         </nav>
         <div className="nav-actions">
-          <a className="login-link" href="#login">Login</a>
-          <ActionLink href="/dashboard">Open Dashboard <ArrowRight size={15} /></ActionLink>
+          <Link to="/login" className="login-link">Login</Link>
+          <Link to="/login" className="action-link action-primary">Open Dashboard <ArrowRight size={15} /></Link>
         </div>
         <button className="menu-button" aria-label="Toggle navigation" onClick={() => setMenuOpen((value) => !value)}>
           {menuOpen ? <X /> : <Menu />}
@@ -282,7 +282,7 @@ function CoalGuard() {
           <nav className="mobile-nav" aria-label="Mobile navigation">
             {navItems.map(([label, id]) => <a key={id} href={`#${id}`} onClick={() => setMenuOpen(false)}>{label}</a>)}
             <Link to="/dashboard" onClick={() => setMenuOpen(false)}>Dashboard</Link>
-            <a href="#login">Login</a>
+            <Link to="/login" onClick={() => setMenuOpen(false)}>Login</Link>
           </nav>
         )}
       </header>

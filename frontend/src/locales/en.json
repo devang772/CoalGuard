@@ -1,0 +1,60 @@
+{
+  "app_name": "CoalGuard · Khanan Netra",
+  "tagline": "AI-Powered Smart Governance & Compliance Platform",
+  "ministry": "Ministry of Coal · Coal India Limited",
+  "nav": {
+    "dashboard": "Command Dashboard",
+    "gis_map": "GIS & Digital Twin",
+    "leaderboard": "Safety Leaderboard",
+    "rule_studio": "Rule Studio & AI Extraction",
+    "tasks": "Compliance Tasks",
+    "inspections": "Inspections",
+    "capa_board": "CAPA Board (Satya Proof)",
+    "incidents": "Observations & Incidents",
+    "contractors": "Contractors & Labour",
+    "attendance": "Attendance Monitor",
+    "grievances": "Grievance Redressal",
+    "insights": "Risk & Insights",
+    "ask_netra": "Ask Netra (AI Copilot)",
+    "reports": "Compliance Reports",
+    "audit": "Audit & Chain Verification",
+    "users": "User Management",
+    "org_structure": "Org Structure",
+    "escalation": "Escalation Rules",
+    "settings": "System Settings"
+  },
+  "scope": {
+    "all_subsidiaries": "All Subsidiaries (CIL)",
+    "all_areas": "All Areas",
+    "all_mines": "All Mines"
+  },
+  "roles": {
+    "cil_admin": "CIL Corporate Admin",
+    "subsidiary_admin": "Subsidiary Admin",
+    "area_gm": "Area General Manager",
+    "mine_manager": "Mine Manager",
+    "safety_officer": "Safety Officer",
+    "regulator": "DGMS/SPCB Regulator",
+    "contractor_admin": "Contractor Admin"
+  },
+  "status": {
+    "pending": "Pending",
+    "done": "Done",
+    "overdue": "Overdue",
+    "open": "Open",
+    "in_review": "In Review",
+    "closed": "Closed",
+    "rejected": "Rejected",
+    "verified": "Verified",
+    "suspicious": "Suspicious"
+  },
+  "actions": {
+    "approve": "Approve",
+    "reject": "Reject",
+    "upload": "Upload Document",
+    "download": "Download Report",
+    "verify_chain": "Verify Chain Integrity",
+    "switch_role": "Switch Demo Role",
+    "search": "Search..."
+  }
+}
