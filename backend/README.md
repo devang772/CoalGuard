@@ -13,7 +13,7 @@ Built with **FastAPI + PostgreSQL**.
 | 5 | Satya Proof, before/after closure, tamper-proof audit | ✅ Done |
 | 6 | Contractors, workers, attendance, fraud rules | ✅ Done |
 | 7 | Field reports, SOS, grievances, live notifications, offline sync | ✅ Done |
-| 8 | Reminders and escalation ladder | ⏳ |
+| 8 | Reminders and escalation ladder | ✅ Done |
 | 9 | Dashboards, leaderboard, reports, final tests | ⏳ |
 | AI | `app/ai/` + `app/routers/ai.py`, built by the AI/ML teammate from the shared ML/AI module plan | ⏳ |
 
@@ -86,6 +86,11 @@ Updated after every module:
 - [docs/FOR_FRONTEND_TEAM.md](docs/FOR_FRONTEND_TEAM.md): endpoints, response shapes, flow changes, demo stories
 - [docs/FOR_ML_TEAM.md](docs/FOR_ML_TEAM.md): tables, training data, planted patterns, plug-in contracts
 
+## Background jobs (alarm clock)
+Run inside the API process when `SCHEDULER_ENABLED=true` (only one process should run them):
+nightly 00:05 IST (new tasks + overdue), reminders every 15 min, escalation every 5 min, digest 08:00 IST.
+Demo: start with `DEMO_TIME_SPEED=60` (1 real minute = 1 hour for deadlines) and use `POST /jobs/run?job=escalation`.
+
 ## Photo uploads
 Photos are stored under `backend/uploads/YYYY/MM/` (set `UPLOAD_DIR` to change; the folder is git-ignored).
 Each upload is checked automatically (Satya Proof) and gets a trust score; see `app/services/proof.py`.
@@ -124,6 +129,9 @@ app/
     fraud.py           # ghost-worker / labour-compliance alerts + contractor score
     notify.py          # who gets which notification + push after commit
     realtime.py        # WebSocket broadcaster (in-memory; add Redis pub/sub for several servers)
+    jobs.py            # nightly tasks, reminders, escalation ladder, morning digest
+    scheduler.py       # APScheduler timetable (IST) + job status
+    clock.py           # demo clock (DEMO_TIME_SPEED)
   deps.py        # shared router helpers (mine-in-scope check, filters, pagination)
 seed/bootstrap.py  # org tree (CIL > 3 subsidiaries > 6 areas > 12 mines) + demo users + escalation rules
 seed/generate.py   # 6 months of sample activity with planted patterns
@@ -211,5 +219,8 @@ def recommend_obligations(profile: dict) -> list[dict]:
 | WS | `/ws/notifications?token=` | live push of new notifications |
 | GET | `/sync/master` | offline download pack for the phone |
 | POST | `/sync/bulk` | offline queue upload, per-item created / duplicate / error |
+| GET, PUT | `/config/escalation` | hours to fix, reminder times, escalation ladder (PUT: CIL admin) |
+| GET | `/jobs/status` | background jobs: last run, result, next run |
+| POST | `/jobs/run?job=` | run nightly / reminders / escalation / digest now (demo) |
 
 Full request/response details: [docs/FOR_FRONTEND_TEAM.md](docs/FOR_FRONTEND_TEAM.md).

@@ -210,6 +210,7 @@ class Capa(TimestampMixin, Base):
     closure_note: Mapped[str | None] = mapped_column(Text)
     after_evidence_id: Mapped[int | None] = mapped_column(ForeignKey("evidence.id"))
     closure_checks: Mapped[list | None] = mapped_column(JSON)             # [{name, passed, detail}]
+    reminders_sent: Mapped[list | None] = mapped_column(JSON)            # reminder hours already sent, e.g. [72, 24]
     closure_score: Mapped[float | None] = mapped_column(Float)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
@@ -278,6 +279,7 @@ class Observation(TimestampMixin, Base):
     anonymous: Mapped[bool] = mapped_column(Boolean, default=False)
     evidence_id: Mapped[int | None] = mapped_column(ForeignKey("evidence.id"))
     finding_id: Mapped[int | None] = mapped_column(ForeignKey("findings.id"))   # set when turned into a CAPA
+    escalation_level: Mapped[int] = mapped_column(Integer, default=0)            # SOS re-alerts sent
     acknowledged_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime)
     client_uuid: Mapped[str | None] = mapped_column(String(64), unique=True)
@@ -298,6 +300,7 @@ class Grievance(TimestampMixin, Base):
     responded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     responded_at: Mapped[datetime | None] = mapped_column(DateTime)
     language: Mapped[str] = mapped_column(String(5), default="en")
+    escalation_level: Mapped[int] = mapped_column(Integer, default=0)            # unanswered -> GM -> subsidiary
     sentiment: Mapped[str | None] = mapped_column(String(10))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
     client_uuid: Mapped[str | None] = mapped_column(String(64), unique=True)

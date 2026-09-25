@@ -15,8 +15,8 @@ Branch: `backend` · Folder: `backend/` · Your code goes in `backend/app/ai/` a
 | 5. Satya Proof + audit | ✅ | **Calls your `verify_hazard_gone()`** during CAPA closure; real photo files + trust scores; audit history |
 | 6. Contractors, attendance, fraud | ✅ | rule-based ghost-worker / labour alerts = your baseline; new attendance columns |
 | 7. Field reports, SOS, grievances, sync | ✅ | voice reports stored with transcript + language; more near-miss/incident data; grievance texts |
-| 8. Reminders + escalation | ⏳ next | — |
-| 9. Dashboards + reports | ⏳ | dashboards reuse `predict_risk()` |
+| 8. Reminders + escalation | ✅ | escalation levels over time = accountability features; reminders_sent |
+| 9. Dashboards + reports | ⏳ next | dashboards reuse `predict_risk()` |
 
 ---
 
@@ -376,3 +376,25 @@ submit. Not required for the demo.
 #### Table changes
 - `observations.finding_id` (new), `grievances.responded_by / responded_at / language` (new),
   `notifications.kind` (new: `sos, incident, finding, capa, grievance, general`).
+
+---
+
+### Module 8: Reminders + escalation ladder ✅
+**Rebuild your local DB and re-seed** (new columns). `pip install -r requirements.txt` (APScheduler, tzdata).
+No plug-in point here, just new signals you can use.
+
+#### New / newly meaningful columns
+- `capas.escalation_level` (0 owner · 1 Area GM · 2 Subsidiary · 3 CIL), `capas.last_escalated_at`,
+  `capas.reminders_sent` (JSON list of reminder hours already sent, e.g. `[72, 24]`).
+- `compliance_tasks.escalation_level`: 1 at 1 day late, 2 at 3 days, 3 at 7 days.
+- `grievances.escalation_level` (new): 1 = unanswered 7 days, 2 = 14 days.
+- `observations.escalation_level` (new, SOS only): 1 = re-alert after 15 min unanswered, 2 = after 30 min.
+- The **audit chain** records every level change with a timestamp (`audit_logs` where `table_name='capas'` and
+  `escalation_level` changed), which gives you "time to escalate" per mine.
+
+#### Feature ideas (accountability)
+Share of CAPAs reaching level ≥ 2 in the last 30 days per mine · average hours from due to fix · number of SOS
+re-alerts · unanswered-grievance count. In the seed data, Kusunda OCP has by far the most escalated items.
+
+#### If you write code that changes data
+Same rule as before: use ORM changes (not bulk statements), so the audit chain stays clean.

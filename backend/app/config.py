@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     auto_bootstrap: bool = True
     demo_password: str = "demo123"
 
+    # Background jobs (reminders, escalation ladder, nightly tasks). Only ONE server process should run them.
+    scheduler_enabled: bool = True
+    # Demo mode: 60 means 1 real minute counts as 1 hour for reminders/escalations (1 = real time)
+    demo_time_speed: float = 1.0
+
     # How long to wait for the ML engine before using the fallback matcher
     ml_timeout_seconds: float = 20.0
 

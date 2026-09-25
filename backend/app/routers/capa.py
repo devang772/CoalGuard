@@ -12,6 +12,7 @@ from app.deps import Pagination, check_evidence, get_mine_in_scope, resolve_mine
 from app.models import Capa, Evidence, Finding, OrgUnit, User
 from app.schemas import CapaAssign, CapaCloseRequest, CapaDetail, CapaOut, CapaSummary, FindingOut, Page
 from app.services.approvals import history, verify_approvals
+from app.services.audit import record_history
 from app.services.capa import AFTER_PHOTO_REQUIRED, closure_checks
 from app.services.evidence import evidence_brief
 from app.services.notify import notify, people_for_mine
@@ -72,6 +73,10 @@ def capa_detail(db: Session, capa: Capa) -> dict:
                          "approver_name": names.get(a.approver_id), "decision": a.decision, "remark": a.remark,
                          "hash": a.hash, "created_at": a.created_at} for a in approvals]
     row["approvals_verified"] = verify_approvals(approvals)
+    row["escalation_history"] = [
+        {"level": h["data"]["escalation_level"], "at": h["created_at"]}
+        for h in record_history(db, "capas", capa.id)
+        if "escalation_level" in h["changed_fields"] and h["data"].get("escalation_level")]
     row["before_photo"] = evidence_brief(db, row["finding"]["photo_evidence_id"])
     row["after_photo"] = evidence_brief(db, capa.after_evidence_id)
     return row

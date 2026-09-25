@@ -7,10 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import models  # noqa: F401  (registers all tables on Base)
 from app.config import settings
 from app.db import Base, SessionLocal, engine
-from app.routers import (approvals, attendance, audit, auth, capa, contractors, evidence, gis, grievances, health,
+from app.routers import (admin, approvals, attendance, audit, auth, capa, contractors, evidence, gis, grievances, health,
                          inspections, mines, notifications, observations, org, sync, tasks)
 from app.services import audit as audit_chain  # noqa: F401  (registers the automatic history hook)
 from app.services import notify as live_push  # noqa: F401  (registers the push-after-commit hook)
+from app.services import scheduler
 from app.services.tasks import generate_tasks, mark_overdue
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -27,7 +28,10 @@ async def lifespan(app: FastAPI):
         created, overdue = generate_tasks(db), mark_overdue(db)
         db.commit()
         log.info("Startup: %d tasks created, %d marked overdue", created, overdue)
+    if settings.scheduler_enabled:
+        scheduler.start()
     yield
+    scheduler.stop()
 
 
 app = FastAPI(
@@ -64,3 +68,4 @@ app.include_router(observations.router)
 app.include_router(grievances.router)
 app.include_router(notifications.router)
 app.include_router(sync.router)
+app.include_router(admin.router)

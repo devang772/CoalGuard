@@ -387,7 +387,8 @@ class Generator:
                              category="other", text="SOS emergency alert", severity="critical", lat=lat, lng=lng,
                              location_text=None, source="app", language="en", transcript=None, anonymous=False,
                              evidence_id=None, acknowledged_by=self.person(mine, Role.MINE_MANAGER) if acked else None,
-                             acknowledged_at=when + timedelta(minutes=4) if acked else None, created_at=when))
+                             acknowledged_at=when + timedelta(minutes=4) if acked else None,
+                             escalation_level=0 if acked else 2, created_at=when))
         self.bulk(Evidence, self.evidence_rows)
         self.evidence_rows = []
         self.bulk(Observation, rows)
@@ -397,7 +398,8 @@ class Generator:
         lat, lng = self.point_in(mine)
         row = dict(mine_id=mine.id, reporter_id=officer, type=kind, category=None, text="", severity="medium",
                    lat=lat, lng=lng, location_text=None, source="app", language="en", transcript=None,
-                   anonymous=False, evidence_id=None, acknowledged_by=None, acknowledged_at=None, created_at=when)
+                   anonymous=False, evidence_id=None, acknowledged_by=None, acknowledged_at=None,
+                   escalation_level=0, created_at=when)
         if kind != "incident" and self.rng.random() < 0.2:
             transcript, vtype, category, severity, hazard = self.rng.choice(S.HINDI_VOICE)
             reporter = self.worker_user if mine.name == "Moonidih UG" else officer
@@ -542,11 +544,12 @@ class Generator:
             used.add(token)
             age = (self.now - when).days
             status = "closed" if age > 60 else "resolved" if age > 30 else self.rng.choice(["new", "in_progress"])
+            level = (2 if age >= 14 else 1 if age >= 7 else 0) if status == "new" else 0
             rows.append(dict(token=token, mine_id=mine.id, category=category,
                              text=self.rng.choice(S.GRIEVANCES[category]), anonymous=anonymous,
                              user_id=None if anonymous else self.worker_user, status=status,
                              response="Issue checked and resolved by the mine office." if status in ("resolved", "closed") else None,
-                             sentiment=self.rng.choice(["negative", "negative", "neutral"]),
+                             sentiment=self.rng.choice(["negative", "negative", "neutral"]), escalation_level=level,
                              created_at=when, updated_at=when + timedelta(days=min(age, self.rng.randint(0, 10)))))
         self.bulk(Grievance, rows)
 

@@ -397,6 +397,7 @@ class CapaDetail(CapaOut):
     approvals_verified: bool
     before_photo: EvidenceBrief | None = None
     after_photo: EvidenceBrief | None = None
+    escalation_history: list[dict] = []
 
 
 class CapaSummary(BaseModel):

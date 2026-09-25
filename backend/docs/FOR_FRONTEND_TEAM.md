@@ -15,8 +15,8 @@ Branch: `backend` · Folder: `backend/` · Live API docs (when running): **http:
 | 5. Satya Proof, before/after closure, audit | ✅ | photo upload + trust score with reasons, signed image links, automatic before/after closure checks, audit history + "Verify Chain" |
 | 6. Contractors, workers, attendance, fraud | ✅ | contractors (list, 360, add/edit, alerts, score), workers (list, add/edit/deactivate), attendance (self + gate mode, monitor, summary, my attendance) |
 | 7. Field reports, SOS, grievances, notifications, sync | ✅ | field reports (app + voice, anonymous, auto-CAPA), SOS + acknowledge, grievances (anonymous + token tracking), notifications + live WebSocket, offline download pack + bulk sync |
-| 8. Reminders + escalation | ⏳ next | |
-| 9. Dashboards, leaderboard, reports | ⏳ | |
+| 8. Reminders + escalation | ✅ | escalation rules (admin), jobs status + "Run now", CAPA escalation timeline, reminder / escalation / digest notifications |
+| 9. Dashboards, leaderboard, reports | ⏳ next | |
 
 Until an endpoint exists, keep using your **mock data**, but shape it like the contracts in your frontend prompt
 (and the changes listed below).
@@ -796,3 +796,63 @@ Rebuild your local database and re-seed (new columns).
     404 = a missing parent (e.g. the inspection wasn't sent yet), 409 = conflict (e.g. task already done by someone else),
     422 = bad data (fix the form), 500 = retry later.
   - One bad item never stops the others; re-sending the whole queue is safe (you'll get `duplicate`).
+
+---
+
+### Module 8: Automatic reminders + escalation ladder ✅
+Rebuild your local database and re-seed (new columns). Nothing changes in how you call earlier endpoints.
+The backend now **chases late work by itself**, and you mostly just see **new notifications**.
+
+#### What the backend does on its own (Indian time)
+| Job | When | Effect you'll see |
+|---|---|---|
+| nightly | 00:05 | new day/week/month tasks appear; unfinished ones turn `overdue` |
+| reminders | every 15 min | CAPA owner gets `kind: "reminder"`, e.g. "Reminder: CAPA #812 is due in 20 h" |
+| escalation | every 5 min | seniors get `kind: "escalation"`; `escalation_level` rises on CAPAs / tasks |
+| digest | 08:00 | manager + safety officers get `kind: "digest"`: "Today at Moonidih UG: 6 task(s) due" |
+
+**Escalation ladder** (each step notified **once**):
+- **CAPA:** deadline passed → level 1 (Area GM); +1 SLA period (critical 24 h, high 72 h, medium 7 d, low 15 d) →
+  level 2 (Subsidiary admin); +1 more → level 3 (CIL admin). The owner is told each time ("CAPA #812 escalated to Area GM").
+- **Compliance tasks:** 1 day late → level 1, 3 days → level 2, 7 days → level 3. Sent as **one grouped message per mine**
+  ("3 overdue compliance task(s) at Moonidih UG escalated to you"), link `/tasks?mine_id=4&due=overdue`.
+- **Grievances** still `new` with no reply: 7 days → Area GM, 14 days → Subsidiary admin.
+- **SOS** not acknowledged: 15 min → re-alert Area GM + Subsidiary admin, 30 min → CIL admin (`kind: "sos"`, critical).
+- Fixing / submitting / acknowledging / replying stops the ladder for that item.
+
+New notification `kind`s: `reminder`, `escalation`, `digest` (plus the Module 7 kinds). Suggested icons:
+⏰ reminder, 🪜 escalation (warning = amber, critical = red), ☀️ digest.
+
+#### CAPA detail: escalation timeline
+`GET /capa/{id}` now also returns
+`"escalation_history": [{"level": 1, "at": "2026-09-12T08:05:00"}, {"level": 2, "at": "…"}]`.
+Show it as a timeline: Level 1 = Area GM, 2 = Subsidiary, 3 = CIL. Seeded CAPAs have a level but no history entries.
+
+#### Admin → Escalation Rules screen
+- `GET /config/escalation` (managers, GM, admins, regulator) →
+```json
+[{"severity": "critical", "sla_hours": 24, "reminder_hours": [6],
+  "levels": ["mine_manager", "area_gm", "subsidiary_admin", "cil_admin"]},
+ {"severity": "high", "sla_hours": 72, "reminder_hours": [24], "levels": [...]},
+ {"severity": "medium", "sla_hours": 168, "reminder_hours": [72, 24], "levels": [...]},
+ {"severity": "low", "sla_hours": 360, "reminder_hours": [72, 24], "levels": [...]}]
+```
+- `PUT /config/escalation` (**CIL admin only**, because the rules apply to every mine) body `{"rules": [ ...all 4 severities... ]}`.
+  Rules: every reminder > 0 and < `sla_hours`; `levels` = 2–4 roles, starting with `mine_manager`, going upward in the
+  order `mine_manager → area_gm → subsidiary_admin → cil_admin`. `422` with a readable message otherwise.
+  New deadlines apply to CAPAs created afterwards.
+
+#### Demo helpers (Admin → Jobs)
+- `GET /jobs/status` →
+```json
+{"scheduler_running": true, "demo_time_speed": 60.0,
+ "jobs": {"escalation": {"schedule": "every 5 minutes", "last_run": "…", "duration_ms": 50,
+          "result": {"capa_steps": 0, "task_groups": 0, "grievance_steps": 0, "sos_realerts": 1},
+          "error": null, "runs": 2, "next_run": "2026-09-26T02:08:13+05:30"}, "nightly": {...},
+          "reminders": {...}, "digest": {...}}}
+```
+- `POST /jobs/run?job=escalation` (also `nightly`, `reminders`, `digest`), for subsidiary / CIL admins →
+  `{"job": "escalation", "result": {...}}`. Put a **"Run now"** button next to each job.
+- **Demo mode:** the backend is started with `DEMO_TIME_SPEED=60`, so 1 real minute counts as 1 hour for deadlines.
+  In the demo an unanswered SOS re-alerted the GM **live** after ~16 real seconds, and a critical CAPA reaches the GM
+  after ~24 real minutes (or press "Run now" after that).
