@@ -1,246 +1,209 @@
-import React, { useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-} from "react-native";
-import { useRouter } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Mail, Lock, LogIn, ShieldCheck, ArrowLeft, UserCheck } from "lucide-react-native";
-import { useAuth } from "../../context/AuthContext";
-import { BrandHeader } from "../../components/BrandHeader";
-import { AppButton } from "../../components/ui/AppButton";
-import { AppInput } from "../../components/ui/AppInput";
-import { AppCard } from "../../components/ui/AppCard";
-import { COLORS, RADIUS, SPACING } from "../../constants/theme";
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
+import { useAuthStore, DEMO_USERS } from '../../src/store/auth';
+import { loginApi } from '../../src/api/endpoints';
+import { BigButton } from '../../src/components/BigButton';
+import { colors } from '../../src/theme/colors';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { loginUser, isLoading } = useAuth();
-
-  const [email, setEmail] = useState("amit.sharma@coalguard.gov.in");
-  const [password, setPassword] = useState("Inspector123!");
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { login } = useAuthStore();
+  const [phone, setPhone] = useState('9876543210');
+  const [password, setPassword] = useState('demo123');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      setErrorMsg("Please provide both email address and password.");
-      return;
-    }
-
-    setErrorMsg(null);
-    const res = await loginUser(email, password);
-    if (res.success) {
-      router.replace("/(tabs)/home");
-    } else {
-      setErrorMsg(res.error || "Login authentication failed.");
+    setLoading(true);
+    try {
+      const res = await loginApi(phone, password);
+      login(res.user, res.access_token);
+      router.replace('/(auth)/permissions' as any);
+    } catch (e: any) {
+      Alert.alert('Login Error', e.message || 'Unable to authenticate');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const fillQuickDemo = (role: "INSPECTOR" | "MANAGER") => {
-    if (role === "INSPECTOR") {
-      setEmail("amit.sharma@coalguard.gov.in");
-      setPassword("Inspector123!");
-    } else {
-      setEmail("rajesh.manager@coalguard.gov.in");
-      setPassword("Manager123!");
-    }
+  const quickLoginRole = (roleKey: keyof typeof DEMO_USERS) => {
+    const user = DEMO_USERS[roleKey];
+    login(user, 'mock-jwt-token');
+    router.replace('/(auth)/permissions' as any);
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* Top Bar */}
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
-            <ArrowLeft size={20} color={COLORS.primary} />
-            <Text style={styles.backText}>Back</Text>
+    <ScrollView contentContainerStyle={styles.container}>
+      <View style={styles.header}>
+        <View style={styles.logoCircle}>
+          <Feather name="shield" size={40} color={colors.emerald} />
+        </View>
+        <Text style={styles.title}>KHANAN NETRA</Text>
+        <Text style={styles.subtitle}>Netra Mobile · Mine Governance Platform</Text>
+      </View>
+
+      <View style={styles.formCard}>
+        <Text style={styles.label}>Phone Number / मोबाइल नंबर</Text>
+        <TextInput
+          style={styles.input}
+          keyboardType="numeric"
+          value={phone}
+          onChangeText={setPhone}
+          placeholder="Enter 10-digit number"
+          placeholderTextColor="#64748B"
+        />
+
+        <Text style={[styles.label, { marginTop: 16 }]}>Password / पासवर्ड</Text>
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={styles.passwordInput}
+            secureTextEntry={!showPassword}
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Enter password"
+            placeholderTextColor="#64748B"
+          />
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+            <Feather name={showPassword ? 'eye-off' : 'eye'} size={20} color="#64748B" />
+          </TouchableOpacity>
+        </View>
+
+        <BigButton
+          title="Login / प्रवेश करें"
+          onPress={handleLogin}
+          loading={loading}
+          style={{ marginTop: 24 }}
+        />
+      </View>
+
+      {/* Demo Quick-Login Chips */}
+      <View style={styles.demoSection}>
+        <Text style={styles.demoHeader}>⚡ Demo Quick Login Roles:</Text>
+        <View style={styles.chipGrid}>
+          <TouchableOpacity style={styles.chip} onPress={() => quickLoginRole('safety_officer')}>
+            <Text style={styles.chipText}>🛡️ Safety Officer</Text>
           </TouchableOpacity>
 
-          <View style={styles.headerSection}>
-            <BrandHeader subtitle="Inspector Command Terminal" />
-            <Text style={styles.headline}>Field Portal Login</Text>
-            <Text style={styles.subtext}>
-              Sign in with your CoalGuard safety auditor credentials to sync offline field inspections.
-            </Text>
-          </View>
+          <TouchableOpacity style={styles.chip} onPress={() => quickLoginRole('mine_manager')}>
+            <Text style={styles.chipText}>🏗️ Mine Manager</Text>
+          </TouchableOpacity>
 
-          {/* Form Card */}
-          <AppCard variant="glass" style={styles.formCard}>
-            <AppInput
-              label="Official Email"
-              placeholder="e.g. inspector@coalguard.gov.in"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              icon={<Mail size={18} color={COLORS.primary} />}
-            />
+          <TouchableOpacity style={styles.chip} onPress={() => quickLoginRole('worker')}>
+            <Text style={styles.chipText}>👷 Worker</Text>
+          </TouchableOpacity>
 
-            <AppInput
-              label="Security Password"
-              placeholder="••••••••••••"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              icon={<Lock size={18} color={COLORS.primary} />}
-            />
-
-            {errorMsg && (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{errorMsg}</Text>
-              </View>
-            )}
-
-            <TouchableOpacity
-              style={styles.forgotLink}
-              onPress={() => router.push("/(auth)/forgot-password")}
-            >
-              <Text style={styles.forgotText}>Forgot Password or PIN?</Text>
-            </TouchableOpacity>
-
-            <AppButton
-              title="Authenticate & Enter Portal"
-              variant="primary"
-              size="lg"
-              loading={isLoading}
-              icon={<LogIn size={18} color={COLORS.textInverse} />}
-              onPress={handleLogin}
-              style={{ marginTop: 8 }}
-            />
-          </AppCard>
-
-          {/* Demo Login Quick Fill */}
-          <View style={styles.demoSection}>
-            <Text style={styles.demoTitle}>QUICK DEMO ONE-TAP LOGIN</Text>
-            <View style={styles.demoButtons}>
-              <TouchableOpacity
-                style={styles.demoBtn}
-                onPress={() => {
-                  fillQuickDemo("INSPECTOR");
-                  handleLogin();
-                }}
-              >
-                <UserCheck size={14} color={COLORS.primary} />
-                <Text style={styles.demoBtnText}>Inspector Amit</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.demoBtn}
-                onPress={() => {
-                  fillQuickDemo("MANAGER");
-                  handleLogin();
-                }}
-              >
-                <ShieldCheck size={14} color={COLORS.accent} />
-                <Text style={styles.demoBtnText}>Manager Rajesh</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+          <TouchableOpacity style={styles.chip} onPress={() => quickLoginRole('contractor_admin')}>
+            <Text style={styles.chipText}>📋 Contractor Admin</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: COLORS.background,
+  container: {
+    padding: 24,
+    paddingTop: 60,
+    backgroundColor: '#05080A',
+    minHeight: '100%',
   },
-  scrollContent: {
-    padding: SPACING.md,
-    paddingBottom: 40,
+  header: {
+    alignItems: 'center',
+    marginBottom: 30,
   },
-  backBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: SPACING.md,
+  logoCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    backgroundColor: '#0D1518',
+    borderWidth: 1.5,
+    borderColor: '#1A2B26',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
   },
-  backText: {
-    color: COLORS.primary,
+  title: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#FFF',
+    letterSpacing: 1.5,
+  },
+  subtitle: {
     fontSize: 14,
-    fontWeight: "700",
-  },
-  headerSection: {
-    marginBottom: SPACING.lg,
-  },
-  headline: {
-    color: "#ffffff",
-    fontSize: 24,
-    fontWeight: "800",
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  subtext: {
-    color: COLORS.textMuted,
-    fontSize: 13,
-    lineHeight: 18,
+    color: colors.emerald,
+    marginTop: 4,
+    fontWeight: '700',
   },
   formCard: {
-    padding: SPACING.lg,
-    marginBottom: SPACING.lg,
+    backgroundColor: '#0D1518',
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1.5,
+    borderColor: '#1A2B26',
   },
-  errorBox: {
-    backgroundColor: "rgba(244, 63, 94, 0.12)",
-    borderColor: COLORS.destructive,
-    borderWidth: 1,
-    borderRadius: RADIUS.xs,
-    padding: 10,
-    marginBottom: 12,
+  label: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.emerald,
+    marginBottom: 6,
   },
-  errorText: {
-    color: COLORS.destructive,
-    fontSize: 12,
-    fontWeight: "600",
+  input: {
+    borderWidth: 1.5,
+    borderColor: '#1A2B26',
+    backgroundColor: '#05080A',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#FFFFFF',
   },
-  forgotLink: {
-    alignSelf: "flex-end",
-    marginBottom: 16,
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#1A2B26',
+    backgroundColor: '#05080A',
+    borderRadius: 12,
+    paddingHorizontal: 16,
   },
-  forgotText: {
-    color: COLORS.primary,
-    fontSize: 12,
-    fontWeight: "600",
+  passwordInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#FFFFFF',
+  },
+  eyeBtn: {
+    padding: 8,
   },
   demoSection: {
-    marginTop: SPACING.xs,
+    marginTop: 30,
   },
-  demoTitle: {
-    color: COLORS.textMuted,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1,
-    textAlign: "center",
-    marginBottom: 10,
+  demoHeader: {
+    color: colors.emerald,
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 12,
+    letterSpacing: 0.5,
   },
-  demoButtons: {
-    flexDirection: "row",
+  chipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
   },
-  demoBtn: {
-    flex: 1,
-    height: 42,
-    backgroundColor: COLORS.surfaceStrong,
-    borderColor: COLORS.borderHighlight,
-    borderWidth: 1,
-    borderRadius: RADIUS.md,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
+  chip: {
+    backgroundColor: '#0D1518',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#1A2B26',
   },
-  demoBtnText: {
-    color: COLORS.text,
-    fontSize: 12,
-    fontWeight: "700",
+  chipText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

@@ -1,76 +1,74 @@
-import React from "react";
-import { Tabs } from "expo-router";
-import { View, Text, StyleSheet } from "react-native";
-import { Home, ClipboardCheck, WifiOff, Bell, User } from "lucide-react-native";
-import { COLORS } from "../../constants/theme";
-import { useInspection } from "../../context/InspectionContext";
+import React from 'react';
+import { Tabs } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
+import { View, StyleSheet } from 'react-native';
+import { useAuthStore } from '../../src/store/auth';
+import { getTabsForRole } from '../../src/lib/rbac';
+import { colors } from '../../src/theme/colors';
 
 export default function TabsLayout() {
-  const { pendingCount } = useInspection();
+  const { user } = useAuthStore();
+  const roleTabs = getTabsForRole(user?.role || 'safety_officer');
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: true,
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textSubtle,
+        tabBarActiveTintColor: colors.emerald,
+        tabBarInactiveTintColor: '#64748B',
         tabBarStyle: {
-          backgroundColor: COLORS.backgroundSecondary,
-          borderTopColor: COLORS.border,
-          borderTopWidth: 1,
-          height: 62,
-          paddingBottom: 8,
+          backgroundColor: '#0B1215',
+          borderTopColor: '#1A2B26',
+          height: 65,
+          paddingBottom: 10,
           paddingTop: 6,
         },
         tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: "700",
+          fontSize: 12,
+          fontWeight: '700',
         },
       }}
     >
       <Tabs.Screen
         name="home"
         options={{
-          title: "Home",
-          tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
+          title: 'Home',
+          tabBarIcon: ({ color, size }) => <Feather name="home" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="inspections"
+        name="tasks"
         options={{
-          title: "Inspections",
-          tabBarIcon: ({ color, size }) => <ClipboardCheck size={size} color={color} />,
+          title: 'Tasks',
+          href: roleTabs.some((t) => t.name === 'tasks') ? ('/(tabs)/tasks' as any) : null,
+          tabBarIcon: ({ color, size }) => <Feather name="clipboard" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="pending-uploads"
+        name="report"
         options={{
-          title: "Pending Sync",
-          tabBarIcon: ({ color, size }) => (
-            <View style={styles.badgeContainer}>
-              <WifiOff size={size} color={color} />
-              {pendingCount > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{pendingCount}</Text>
-                </View>
-              )}
+          title: 'Report',
+          href: roleTabs.some((t) => t.name === 'report') ? ('/(tabs)/report' as any) : null,
+          tabBarIcon: ({ color }) => (
+            <View style={styles.centerButton}>
+              <Feather name="plus" size={28} color="#05080A" />
             </View>
           ),
         }}
       />
       <Tabs.Screen
-        name="notifications"
+        name="capa"
         options={{
-          title: "Alerts",
-          tabBarIcon: ({ color, size }) => <Bell size={size} color={color} />,
+          title: 'CAPA',
+          href: roleTabs.some((t) => t.name === 'capa') ? ('/(tabs)/capa' as any) : null,
+          tabBarIcon: ({ color, size }) => <Feather name="shield" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="more"
         options={{
-          title: "Profile",
-          tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
+          title: 'More',
+          tabBarIcon: ({ color, size }) => <Feather name="grid" size={size} color={color} />,
         }}
       />
     </Tabs>
@@ -78,24 +76,18 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
-  badgeContainer: {
-    position: "relative",
-  },
-  badge: {
-    position: "absolute",
-    top: -4,
-    right: -8,
-    backgroundColor: COLORS.warning,
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 4,
-  },
-  badgeText: {
-    color: COLORS.textInverse,
-    fontSize: 9,
-    fontWeight: "900",
+  centerButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: colors.emerald,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    elevation: 8,
+    shadowColor: colors.emerald,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
   },
 });
