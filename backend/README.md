@@ -81,6 +81,11 @@ Click **Authorize** → username = phone, password = `demo123` → then try `GET
 
 Every other mine/area/subsidiary also gets a manager, safety officer, GM or admin (phones `91000000xx`, same password), so escalations always have someone to notify.
 
+## Team handoff notes
+Updated after every module:
+- [docs/FOR_FRONTEND_TEAM.md](docs/FOR_FRONTEND_TEAM.md): endpoints, response shapes, flow changes, demo stories
+- [docs/FOR_ML_TEAM.md](docs/FOR_ML_TEAM.md): tables, training data, planted patterns, plug-in contracts
+
 ## Run tests
 ```bash
 .venv/Scripts/python -m pytest -q
