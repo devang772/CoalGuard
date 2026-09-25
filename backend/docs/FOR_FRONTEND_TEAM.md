@@ -5,6 +5,96 @@ Branch: `backend` · Folder: `backend/` · Live API docs (when running): **http:
 
 ---
 
+## 0. Start here: run the backend and connect your app
+
+### Step 1. Get the backend (it is on `main`)
+```bash
+git checkout main
+git pull
+cd backend
+```
+You need **Python 3.11** and **Docker Desktop** (running). Git Bash / PowerShell on Windows, or any terminal on macOS/Linux.
+
+### Step 2. Install and start (first time: ~3 minutes)
+```bash
+python -m venv .venv
+.venv/Scripts/python -m pip install -r requirements.txt     # macOS/Linux: .venv/bin/python -m pip ...
+cp .env.example .env                                        # PowerShell: copy .env.example .env
+docker compose up -d                                        # PostgreSQL on localhost:5434
+.venv/Scripts/python -m seed.generate                       # 6 months of sample data (~15 s)
+.venv/Scripts/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+- `--host 0.0.0.0` lets a **phone on the same Wi-Fi** reach your laptop.
+- Next time you only need `docker compose up -d` and the `uvicorn …` line.
+- If you pulled a newer backend and the tables changed, rebuild and re-seed (the command is in `backend/README.md`).
+
+### Step 3. Check it works
+- Open **http://localhost:8000/health** → `{"status":"ok","database":"connected"}`.
+- Open **http://localhost:8000/docs** → click **Authorize** → username `9000000001`, password `demo123` → try any endpoint.
+  Every request and response shape is shown there, generated from the code.
+- Demo logins (password `demo123`): see section 4 below.
+
+### Step 4. Point your app at the backend
+| App | Setting | Value |
+|---|---|---|
+| Web (Vite) | `VITE_API_URL` | `http://localhost:8000` |
+| Web | `VITE_USE_MOCKS` | `false` (turn the mocks off) |
+| Mobile (Expo) | `EXPO_PUBLIC_API_URL` | `http://<your laptop's Wi-Fi IP>:8000` (e.g. `http://192.168.1.20:8000`); find the IP with `ipconfig` (Windows) or `ifconfig` (macOS) |
+| Mobile / Web | WebSocket | `ws://<same host>:8000/ws/notifications?token=<access_token>` |
+
+- The mobile app's current default `…:8000/api/v1` **also works**: the backend accepts every route with or without `/api/v1`.
+- The phone and the laptop must be on the **same Wi-Fi**. On Windows, allow Python through the firewall when it asks
+  (or open port 8000).
+- **CORS** is open (`CORS_ORIGINS=*`) for development. For a deployed site, put your frontend URL in `CORS_ORIGINS`
+  in `backend/.env`.
+
+### Step 5. Integration checklist (things that trip people up)
+1. **Login:** `POST /auth/login` `{phone, password}` → store `access_token`; send `Authorization: Bearer <token>`.
+   The token lasts 12 h. On any `401`, clear it and show the login screen.
+2. **Errors:** every error has `detail` **and** `message` (same text), so show either. `422` also has an `errors` list.
+3. **Times** end with `Z` / `+00:00` (UTC). Use `new Date(value)` and show them in IST. Don't add "Z" yourself.
+4. **IDs are numbers** (the mocks used strings like `"mine-moonidih"`).
+5. **Paginated lists** return `{items, total, page, page_size}`: `/tasks`, `/capa`, `/inspections`, `/observations`,
+   `/grievances`, `/attendance`, `/notifications`, `/audit/recent`, `/reports`, `/users`, `/me/reports`. Read `.items`.
+6. **Images:** use `API_URL + evidence.url` (a signed link, no header needed, valid 12 h).
+7. **Photos first:** upload with `POST /evidence` (multipart), then send the returned `id` with the task / finding /
+   closure / attendance.
+8. **Offline queue:** send it to `POST /sync/bulk`. Payload keys are **snake_case** and match the normal endpoints
+   (`task_id`, `capa_id`, `evidence_id`, `inspection_client_uuid`…); see the Module 7 section.
+9. **Role-based menus:** use `user.role` from login; the backend also refuses what a role may not do (`403`, with a message).
+10. **Scope Switcher (web):** send `?org_id=` on dashboard / list calls.
+11. **Optional:** generate TypeScript types from the live API:
+    `npx openapi-typescript http://localhost:8000/openapi.json -o src/api/schema.d.ts`.
+
+### Step 6. Mobile: replace each mock function (`mobile/src/api/endpoints.ts`) with the real call
+| Mock function | Real call(s) | Notes |
+|---|---|---|
+| `loginApi(phone, password)` | `POST /auth/login` | same response shape: `{access_token, user}`; `user.mine_id` is a number |
+| `fetchMasterSyncApi()` | `GET /sync/master` | mines (with `boundary`, `center_lat/center_lng`), checklists, workers, obligations, tasks, `server_time` |
+| `fetchTasksApi()` | `GET /tasks?due=today` (or `?status=pending`) | paginated → `.items`; each task has `obligation`, `evidence` |
+| `completeTaskApi(taskId, evidenceId, remarks)` | `POST /evidence` (photo) → `POST /tasks/{id}/complete` `{evidence_id, remarks, client_uuid}` | offline: `/sync/bulk` kind `task_complete`, payload `{task_id, evidence_id, remarks}` |
+| `fetchCapasApi()` | `GET /capa?owner=me&status=open,rejected` | paginated → `.items`; `finding.photo`, `hours_left`, `overdue` |
+| `closeCapaApi(capaId, afterPhoto)` | `POST /evidence` (after-photo) → `POST /capa/{id}/request-closure` `{evidence_id, note}` | **the server decides**: `status` = `in_review` or `rejected`, reasons in `closure_checks`. Keep your distance meter only as a hint (use `GET /capa/{id}` → `before_photo.lat/lng`) |
+| `processVoiceAiApi(audioUri, language)` | ML teammate's `POST /ai/voice` (multipart `audio`, `language`) | then save with `POST /observations` `{…, source: "voice", transcript, language}` |
+| `markAttendanceApi(lat, lng, selfieUri, isMocked)` | `POST /evidence` (selfie) → `POST /attendance` `{mode: "self", lat, lng, accuracy, selfie_evidence_id, is_mocked, device_id, client_uuid}` | show `message`; `checks` lists each rule. The worker's login must be linked to a worker record (demo: `9000000009`) |
+| `submitGrievanceApi(category, text, anonymous)` | `POST /grievances` `{category, text, anonymous}` | returns the `token` to save |
+| `sendSosApi(lat, lng, note)` | `POST /sos` `{kind, note, lat, lng, accuracy}` | `kind` ∈ fire, roof_fall, gas, injury, flooding, other |
+
+The web app has no API client yet: build it straight from sections 5 onward (every screen → endpoint table).
+
+### Step 7. If something doesn't work
+| Problem | Fix |
+|---|---|
+| Browser: "CORS error" | the backend isn't running, or `CORS_ORIGINS` doesn't include your URL |
+| Phone: "Network request failed" | same Wi-Fi? laptop IP correct? firewall allows port 8000? server started with `--host 0.0.0.0`? |
+| Every call → `401` | token missing or expired, so log in again |
+| Images don't load | prefix the `url` with the API base URL; get a fresh `url` after 12 h |
+| Times look 5½ h off | you're adding "Z" yourself or parsing without the zone; use the value as-is |
+| `500` after `git pull` | the tables changed, so rebuild the local database and re-seed |
+| Port 5434 busy | `DB_PORT=5435 docker compose up -d` and change the port in `DATABASE_URL` |
+
+---
+
 ## 1. Current state at a glance
 | Module | Status | What you can use |
 |---|---|---|
@@ -24,21 +114,7 @@ Until an endpoint exists, keep using your **mock data**, but shape it like the c
 ---
 
 ## 2. How to run the backend on your laptop
-Needs Python 3.11 and Docker Desktop.
-```bash
-git fetch origin && git checkout backend
-cd backend
-python -m venv .venv
-.venv/Scripts/python -m pip install -r requirements.txt      # macOS/Linux: .venv/bin/python
-cp .env.example .env
-docker compose up -d                                        # PostgreSQL on localhost:5434
-.venv/Scripts/python -m uvicorn app.main:app --reload --port 8000
-.venv/Scripts/python -m seed.generate                       # fill 6 months of sample data (~15 s)
-```
-- Web: set `VITE_API_URL=http://localhost:8000`
-- Mobile on a real phone: use your laptop's Wi-Fi IP, e.g. `EXPO_PUBLIC_API_URL=http://192.168.1.20:8000`,
-  and start the server with `--host 0.0.0.0`.
-- CORS is open (`*`) for the hackathon, so any frontend origin works.
+See **section 0 (Start here)** at the top of this file.
 
 ---
 

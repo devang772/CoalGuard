@@ -5,6 +5,65 @@ Branch: `backend` · Folder: `backend/` · Your code goes in `backend/app/ai/` a
 
 ---
 
+## 0. Start here: run the backend and plug in your AI code
+
+### Step 1. Get the backend (it is on `main`) and make your own branch
+```bash
+git checkout main
+git pull
+git checkout -b ml          # work on your own branch, open a PR to main when ready
+cd backend
+```
+
+### Step 2. Install, start and fill the database
+```bash
+python -m venv .venv
+.venv/Scripts/python -m pip install -r requirements.txt        # macOS/Linux: .venv/bin/python -m pip ...
+cp .env.example .env
+docker compose up -d                                           # PostgreSQL on localhost:5434
+.venv/Scripts/python -m seed.generate                          # 6 months of sample data with planted patterns
+.venv/Scripts/python -m uvicorn app.main:app --reload --port 8000
+```
+Check: http://localhost:8000/health and http://localhost:8000/docs (Authorize: `9000000001` / `demo123`).
+Read the data directly: `postgresql+psycopg://netra:netra@localhost:5434/khanan_netra` (e.g. `pd.read_sql(..., engine)`).
+
+### Step 3. Where your code goes (only these files)
+```
+backend/app/ai/__init__.py            empty file (makes app.ai importable)
+backend/app/ai/obligation_engine.py   recommend_obligations(profile) -> list[dict]
+backend/app/ai/risk_model.py          predict_risk(db, mine_ids) -> list[dict]
+backend/app/ai/photo_check.py         verify_hazard_gone(before_path, after_path, finding_text) -> dict
+backend/app/ai/...                    anything else you need (features.py, prompts/, models/ ...)
+backend/app/routers/ai.py             router = APIRouter(prefix="/ai", ...) with your /ai/* endpoints
+backend/requirements-ai.txt           your extra packages
+backend/tests/test_ai_*.py            your tests
+```
+- **Don't edit `app/main.py`.** Your `app/routers/ai.py` is included automatically at startup.
+- Put API keys in `backend/.env` (it is git-ignored; never commit keys), e.g. `LLM_API_KEY=...`, and read them with
+  your own `pydantic-settings` class or `os.environ`.
+- If you need a new column or table, ask the backend owner (don't change `app/models.py` yourself).
+- Every plug-in point is **optional**: until yours exists, the backend uses a safe fallback, so you can merge
+  piece by piece.
+
+### Step 4. Check each piece is really connected
+| Piece | How to see it working |
+|---|---|
+| Your router | server log shows `AI router loaded: /ai/* endpoints available.`; your endpoints appear in `/docs` under your tag |
+| `recommend_obligations` | `PUT /mines/4/profile` (or `POST /mines/4/obligations/refresh`) → the response has `"source": "ml_engine"` |
+| `predict_risk` | `GET /mines` or `GET /gis/mines` → `risk.source` is `"ml_model"`; the dashboard `top_risky_mines` uses it |
+| `verify_hazard_gone` | submit a CAPA fix with an after-photo (`POST /capa/{id}/request-closure`) → `closure_checks` contains `"AI: hazard no longer visible"` |
+| Your tests | `.venv/Scripts/python -m pytest -q` → the backend's 135 tests + yours all pass |
+
+### Step 5. Rules to keep everything working
+1. Filter every query with `scope_mine_ids(db, user, org_id)` (a user must only see their area).
+2. On AI outages, return `503` with a message; never let an exception escape (the backend already times out after 20 s).
+3. Write data only through the ORM (`db.add`, attribute changes, `db.delete`), never bulk `update()`/`delete()`, so the
+   tamper-proof audit chain stays clean.
+4. Keep response shapes exactly as in the plan / sections below; the frontend is being built against them.
+5. Times: ORM values are timezone-aware UTC; raw SQL / pandas values are naive UTC.
+
+---
+
 ## 1. Current state at a glance
 | Module | Status | Relevant to you |
 |---|---|---|
@@ -21,21 +80,7 @@ Branch: `backend` · Folder: `backend/` · Your code goes in `backend/app/ai/` a
 ---
 
 ## 2. Get the data on your laptop
-```bash
-git fetch origin && git checkout backend
-cd backend
-python -m venv .venv
-.venv/Scripts/python -m pip install -r requirements.txt
-cp .env.example .env
-docker compose up -d                     # PostgreSQL on localhost:5434
-.venv/Scripts/python -m seed.generate    # 180 days of sample data (~15 s)
-```
-- Connection string: `postgresql+psycopg://netra:netra@localhost:5434/khanan_netra`
-  (in code: `from app.db import engine, SessionLocal, get_db`).
-- Quick pandas access: `pd.read_sql("select * from findings", engine)`.
-- **Deterministic:** `--seed 42` (default) always gives the same data; try `--seed 7` to test that your
-  model generalises. `--reset` regenerates. `--days 365` gives a longer history.
-- If tables changed after a pull, rebuild your local DB (command in `backend/README.md`), then re-seed.
+See **section 0 (Start here)** at the top of this file.
 
 ---
 
@@ -438,7 +483,7 @@ Same rule as before: use ORM changes (not bulk statements), so the audit chain s
 
 To add your router, append **one line** each to `app/main.py`: `from app.routers import ai` and `app.include_router(ai.router)`.
 Test data: `python -m seed.generate --reset`. Contracts, shapes and planted patterns are in the sections above.
-Run the backend tests after merging: `python -m pytest -q` (132 tests; the ML-hook tests use fake modules, so they
+Run the backend tests after merging: `python -m pytest -q` (135 tests; the ML-hook tests use fake modules, so they
 keep passing with or without your code).
 
 ---

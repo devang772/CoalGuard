@@ -1,7 +1,7 @@
 # Khanan Netra: Backend API
 
 AI-based smart governance and compliance monitoring for coal mines (SIH PS 26024).
-Built with **FastAPI + PostgreSQL**. 132 automated tests.
+Built with **FastAPI + PostgreSQL**. 135 automated tests.
 
 **What it does:** mine profile → applicable laws → task calendar · inspections → automatic CAPA fix-it tickets ·
 Satya Proof (photos that can't be faked: GPS/boundary, reused-photo, time and EXIF checks) · before/after closure

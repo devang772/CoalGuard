@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import models  # noqa: F401  (registers all tables on Base)
 from app.config import settings
@@ -85,12 +86,43 @@ def _readable(error: dict) -> str:
 
 @app.exception_handler(RequestValidationError)
 async def validation_error(request: Request, exc: RequestValidationError):
-    """Same shape as every other error: {"detail": "one readable sentence"} (+ the full list in "errors")."""
+    """Same shape as every other error: {"detail": "one readable sentence", "message": same} + the full list."""
     errors = exc.errors()
+    sentence = _readable(errors[0]) if errors else "Invalid request."
     return JSONResponse(status_code=422, content={
-        "detail": _readable(errors[0]) if errors else "Invalid request.",
+        "detail": sentence, "message": sentence,
         "errors": [{"field": ".".join(str(p) for p in e.get("loc", ())), "message": str(e.get("msg", ""))}
                    for e in errors]})
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error(request: Request, exc: StarletteHTTPException):
+    """Every error: {"detail": "...", "message": "..."} (both keys, same text, so any client can read it)."""
+    text = exc.detail if isinstance(exc.detail, str) else "Request failed."
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail, "message": text},
+                        headers=getattr(exc, "headers", None))
+
+
+class ApiV1Alias:
+    """Also accept every route under /api/v1 (the mobile app's default base URL), e.g. /api/v1/auth/login ->
+    /auth/login, including the WebSocket. The documented paths stay without the prefix."""
+    PREFIX = "/api/v1"
+
+    def __init__(self, asgi_app):
+        self.app = asgi_app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] in ("http", "websocket"):
+            path = scope.get("path", "")
+            if path == self.PREFIX or path.startswith(self.PREFIX + "/"):
+                scope = dict(scope)
+                scope["path"] = path[len(self.PREFIX):] or "/"
+                if scope.get("raw_path"):
+                    scope["raw_path"] = scope["path"].encode()
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(ApiV1Alias)
 
 
 app.include_router(health.router)
