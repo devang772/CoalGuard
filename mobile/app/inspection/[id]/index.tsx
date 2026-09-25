@@ -80,7 +80,7 @@ export default function InspectionChecklistScreen() {
         style={styles.addFindingBtn}
         onPress={() => router.push(`/inspection/${id}/finding` as any)}
       >
-        <Feather name="plus-circle" size={20} color={colors.coalBlue} />
+        <Feather name="plus-circle" size={20} color={colors.emerald} />
         <Text style={styles.addFindingText}>Add Unscheduled Safety Finding</Text>
       </TouchableOpacity>
 
@@ -96,22 +96,25 @@ export default function InspectionChecklistScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
+    minHeight: '100%',
   },
   headerCard: {
-    backgroundColor: colors.coalBlue,
+    backgroundColor: colors.cardBackground,
     borderRadius: 18,
     padding: 18,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   chkTitle: {
     fontSize: 20,
     fontWeight: '900',
-    color: '#FFF',
+    color: colors.textPrimary,
   },
   subText: {
     fontSize: 13,
-    color: colors.safetyAmber,
+    color: colors.emerald,
     marginTop: 4,
   },
   progressRow: {
@@ -121,36 +124,36 @@ const styles = StyleSheet.create({
   progressText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#FFF',
+    color: colors.textPrimary,
   },
   track: {
     height: 8,
-    backgroundColor: '#334155',
+    backgroundColor: '#1E293B',
     borderRadius: 4,
     overflow: 'hidden',
   },
   fill: {
     height: '100%',
-    backgroundColor: colors.safetyAmber,
+    backgroundColor: colors.emerald,
   },
   itemCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   itemNum: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#64748B',
+    color: colors.textSecondary,
     marginBottom: 4,
   },
   itemText: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
     lineHeight: 22,
     marginBottom: 14,
   },
@@ -163,7 +166,8 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#CBD5E1',
+    borderColor: '#1E293B',
+    backgroundColor: '#131F24',
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -182,24 +186,24 @@ const styles = StyleSheet.create({
     borderColor: colors.danger,
   },
   naActive: {
-    backgroundColor: '#64748B',
-    borderColor: '#64748B',
+    backgroundColor: '#475569',
+    borderColor: '#475569',
   },
   addFindingBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.safetyAmberLight,
+    backgroundColor: colors.emeraldMuted,
     paddingVertical: 14,
     borderRadius: 14,
     gap: 8,
     borderWidth: 1.5,
-    borderColor: colors.safetyAmber,
+    borderColor: colors.emeraldBorder,
     marginVertical: 10,
   },
   addFindingText: {
     fontSize: 15,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
   },
 });

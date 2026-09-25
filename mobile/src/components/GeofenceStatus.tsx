@@ -5,7 +5,7 @@ import { colors } from '../theme/colors';
 
 interface GeofenceStatusProps {
   isInside: boolean;
-  mineName?: string;
+  mineName?: string | null;
   accuracyMeters?: number;
 }
 
@@ -14,6 +14,7 @@ export const GeofenceStatus: React.FC<GeofenceStatusProps> = ({
   mineName = 'Moonidih UG',
   accuracyMeters = 8,
 }) => {
+  const displayMineName = mineName || 'Mine Unit';
   return (
     <View style={[styles.container, isInside ? styles.inside : styles.outside]}>
       <Feather
@@ -22,7 +23,7 @@ export const GeofenceStatus: React.FC<GeofenceStatusProps> = ({
         color={isInside ? colors.emerald : colors.danger}
       />
       <Text style={[styles.text, { color: isInside ? colors.emerald : colors.danger }]}>
-        {isInside ? `Inside ${mineName} ✓` : 'Outside mine boundary ⚠'}
+        {isInside ? `Inside ${displayMineName} ✓` : 'Outside mine boundary ⚠'}
       </Text>
       <Text style={styles.accuracy}>±{accuracyMeters}m</Text>
     </View>

@@ -138,28 +138,31 @@ export default function CapaCloseScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
+    minHeight: '100%',
   },
   title: {
     fontSize: 24,
     fontWeight: '900',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   subTitle: {
     fontSize: 14,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginBottom: 10,
     marginTop: 2,
   },
   devToggle: {
-    backgroundColor: '#334155',
+    backgroundColor: '#131F24',
     padding: 10,
     borderRadius: 10,
     alignItems: 'center',
     marginVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   devToggleText: {
-    color: colors.safetyAmber,
+    color: colors.emerald,
     fontSize: 13,
     fontWeight: '800',
   },
@@ -168,17 +171,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   retakeText: {
-    color: colors.info,
+    color: colors.emerald,
     fontSize: 14,
     fontWeight: '700',
   },
   resultBox: {
     marginTop: 16,
     padding: 16,
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 18,
     borderWidth: 1.5,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   resultTitle: {
     fontSize: 18,

@@ -10,11 +10,28 @@ import { colors } from '../../src/theme/colors';
 
 export default function PermissionsScreen() {
   const router = useRouter();
-  const { setPermissionsOnboarded } = useAuthStore();
+  const { hasOnboardedPermissions, setPermissionsOnboarded } = useAuthStore();
 
-  const [locationAllowed, setLocationAllowed] = useState(false);
-  const [cameraAllowed, setCameraAllowed] = useState(false);
-  const [micAllowed, setMicAllowed] = useState(false);
+  const [locationAllowed, setLocationAllowed] = useState(hasOnboardedPermissions);
+  const [cameraAllowed, setCameraAllowed] = useState(hasOnboardedPermissions);
+  const [micAllowed, setMicAllowed] = useState(hasOnboardedPermissions);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const { status: locStatus } = await Location.getForegroundPermissionsAsync();
+        if (locStatus === 'granted') setLocationAllowed(true);
+
+        const { status: camStatus } = await Camera.getCameraPermissionsAsync();
+        if (camStatus === 'granted') setCameraAllowed(true);
+
+        const { status: micStatus } = await Camera.getMicrophonePermissionsAsync();
+        if (micStatus === 'granted') setMicAllowed(true);
+      } catch {
+        // Fallback for web preview
+      }
+    })();
+  }, []);
 
   const requestLocation = async () => {
     try {
@@ -45,7 +62,7 @@ export default function PermissionsScreen() {
 
   const handleFinish = () => {
     setPermissionsOnboarded(true);
-    router.replace('/(tabs)/home' as any);
+    router.replace('/(auth)/login' as any);
   };
 
   return (
@@ -124,7 +141,7 @@ export default function PermissionsScreen() {
         </TouchableOpacity>
       </View>
 
-      <BigButton title="Continue to Dashboard" onPress={handleFinish} style={{ marginTop: 20 }} />
+      <BigButton title="Continue" onPress={handleFinish} disabled={!locationAllowed} style={{ marginTop: 20 }} />
     </ScrollView>
   );
 }

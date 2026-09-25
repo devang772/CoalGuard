@@ -26,7 +26,7 @@ export default function SettingsScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       {/* Dev Simulator Card */}
-      <View style={[styles.card, { borderColor: colors.safetyAmber, borderWidth: 2 }]}>
+      <View style={[styles.card, { borderColor: colors.emerald, borderWidth: 1.5 }]}>
         <Text style={styles.devHeader}>⚡ SIH DEMO SIMULATION TOOLS</Text>
 
         <Text style={styles.label}>Location Simulator (Geofence & Satya Test)</Text>
@@ -64,7 +64,7 @@ export default function SettingsScreen() {
           <Switch
             value={themeMode === 'dark'}
             onValueChange={(val) => setThemeMode(val ? 'dark' : 'light')}
-            trackColor={{ true: colors.safetyAmber }}
+            trackColor={{ true: colors.emerald }}
           />
         </View>
 
@@ -73,18 +73,18 @@ export default function SettingsScreen() {
           <Switch
             value={fontSizeMode === 'large'}
             onValueChange={(val) => setFontSizeMode(val ? 'large' : 'normal')}
-            trackColor={{ true: colors.safetyAmber }}
+            trackColor={{ true: colors.emerald }}
           />
         </View>
 
         <View style={styles.switchRow}>
           <Text style={styles.switchLabel}>App Lock (Fingerprint / PIN)</Text>
-          <Switch value={appLockEnabled} onValueChange={setAppLockEnabled} trackColor={{ true: colors.safetyAmber }} />
+          <Switch value={appLockEnabled} onValueChange={setAppLockEnabled} trackColor={{ true: colors.emerald }} />
         </View>
       </View>
 
       <TouchableOpacity style={styles.replayOnboarding} onPress={() => router.push('/(auth)/permissions' as any)}>
-        <Feather name="shield" size={18} color={colors.info} />
+        <Feather name="shield" size={18} color={colors.emerald} />
         <Text style={styles.replayText}>Replay Permissions Onboarding</Text>
       </TouchableOpacity>
     </ScrollView>
@@ -94,32 +94,33 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
+    minHeight: '100%',
   },
   card: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   devHeader: {
     fontSize: 13,
     fontWeight: '900',
-    color: colors.safetyAmberDark,
+    color: colors.emerald,
     marginBottom: 12,
   },
   cardTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
     marginBottom: 12,
   },
   label: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
     marginBottom: 8,
   },
   simGrid: {
@@ -131,19 +132,22 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#131F24',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   simBtnActive: {
-    backgroundColor: colors.coalBlue,
+    backgroundColor: colors.emeraldMuted,
+    borderColor: colors.emerald,
   },
   simText: {
     fontSize: 11,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.textSecondary,
   },
   simTextActive: {
-    color: colors.safetyAmber,
+    color: colors.emerald,
   },
   switchRow: {
     flexDirection: 'row',
@@ -151,12 +155,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
+    borderTopColor: colors.cardBorder,
   },
   switchLabel: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   rowItem: {
     flexDirection: 'row',
@@ -167,12 +171,12 @@ const styles = StyleSheet.create({
   rowLabel: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   rowVal: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.info,
+    color: colors.emerald,
   },
   replayOnboarding: {
     flexDirection: 'row',
@@ -184,6 +188,6 @@ const styles = StyleSheet.create({
   replayText: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.info,
+    color: colors.emerald,
   },
 });

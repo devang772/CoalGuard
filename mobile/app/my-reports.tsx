@@ -60,15 +60,15 @@ export default function MyReportsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
   },
   card: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   header: {
     flexDirection: 'row',
@@ -77,22 +77,24 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   typeTag: {
-    backgroundColor: colors.coalBlue,
-    color: colors.safetyAmber,
+    backgroundColor: '#131F24',
+    color: colors.emerald,
     fontSize: 11,
     fontWeight: '800',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.emeraldBorder,
   },
   title: {
     fontSize: 16,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   time: {
     fontSize: 12,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginTop: 4,
   },
 });

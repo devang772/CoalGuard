@@ -78,7 +78,7 @@ export default function TaskDetailScreen() {
             setPhotoUri('https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=600');
             router.push('/camera' as any);
           }}>
-            <Feather name="camera" size={36} color={colors.safetyAmberDark} />
+            <Feather name="camera" size={36} color={colors.emerald} />
             <Text style={styles.uploadText}>Take Proof Photo (In-App Only)</Text>
             <Text style={styles.uploadSub}>Captures GPS, timestamp & device ID</Text>
           </TouchableOpacity>
@@ -90,6 +90,7 @@ export default function TaskDetailScreen() {
           multiline
           numberOfLines={3}
           placeholder="Add remarks or dictation notes..."
+          placeholderTextColor="#64748B"
           value={remarks}
           onChangeText={setRemarks}
         />
@@ -116,16 +117,16 @@ export default function TaskDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
+    minHeight: '100%',
   },
   card: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 18,
     padding: 18,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    elevation: 2,
+    borderColor: colors.cardBorder,
   },
   badgeRow: {
     flexDirection: 'row',
@@ -134,28 +135,30 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   catBadge: {
-    backgroundColor: colors.coalBlue,
-    color: colors.safetyAmber,
+    backgroundColor: '#131F24',
+    color: colors.emerald,
     fontSize: 11,
     fontWeight: '800',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.emeraldBorder,
   },
   dueText: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.coalBlue,
+    color: colors.textSecondary,
   },
   title: {
     fontSize: 20,
     fontWeight: '900',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
     lineHeight: 26,
   },
   lawRef: {
     fontSize: 14,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginTop: 4,
   },
   evidenceBox: {
@@ -173,22 +176,22 @@ const styles = StyleSheet.create({
   },
   evidenceDesc: {
     fontSize: 13,
-    color: '#1E293B',
+    color: colors.textPrimary,
     marginTop: 2,
   },
   sectionTitle: {
     fontSize: 17,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
     marginBottom: 14,
   },
   uploadPlaceholder: {
     height: 160,
     borderRadius: 14,
     borderWidth: 2,
-    borderColor: colors.safetyAmber,
+    borderColor: colors.emerald,
     borderStyle: 'dashed',
-    backgroundColor: '#FFFBEB',
+    backgroundColor: colors.emeraldMuted,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
@@ -196,12 +199,12 @@ const styles = StyleSheet.create({
   uploadText: {
     fontSize: 16,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
     marginTop: 8,
   },
   uploadSub: {
     fontSize: 12,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   photoContainer: {
@@ -229,16 +232,18 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
     marginBottom: 6,
   },
   textArea: {
     borderWidth: 1.5,
-    borderColor: '#CBD5E1',
+    borderColor: '#1E293B',
     borderRadius: 12,
     padding: 12,
     fontSize: 15,
     textAlignVertical: 'top',
+    backgroundColor: '#131F24',
+    color: colors.textPrimary,
   },
   doneBanner: {
     flexDirection: 'row',

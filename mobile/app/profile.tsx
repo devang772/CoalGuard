@@ -31,25 +31,26 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
+    minHeight: '100%',
   },
   card: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   label: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#64748B',
+    color: colors.emerald,
     marginTop: 12,
   },
   val: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
     marginTop: 2,
   },
 });

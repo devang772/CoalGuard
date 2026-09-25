@@ -57,7 +57,7 @@ export default function AddFindingScreen() {
               <Feather
                 name={cat.icon as any}
                 size={22}
-                color={selectedCat === cat.key ? colors.safetyAmber : colors.coalBlue}
+                color={selectedCat === cat.key ? colors.emerald : colors.textSecondary}
               />
               <Text style={[styles.catTileText, selectedCat === cat.key && styles.catTileTextActive]}>
                 {cat.label}
@@ -97,7 +97,7 @@ export default function AddFindingScreen() {
               router.push('/camera' as any);
             }}
           >
-            <Feather name="camera" size={32} color={colors.safetyAmberDark} />
+            <Feather name="camera" size={32} color={colors.emerald} />
             <Text style={styles.camText}>Take Satya Proof Photo</Text>
           </TouchableOpacity>
         )}
@@ -108,6 +108,7 @@ export default function AddFindingScreen() {
           multiline
           numberOfLines={3}
           placeholder="Describe hazard location and risk details..."
+          placeholderTextColor="#64748B"
           value={description}
           onChangeText={setDescription}
         />
@@ -121,31 +122,32 @@ export default function AddFindingScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
+    minHeight: '100%',
   },
   title: {
     fontSize: 24,
     fontWeight: '900',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   subTitle: {
     fontSize: 14,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginBottom: 16,
     marginTop: 2,
   },
   card: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   label: {
     fontSize: 15,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
     marginBottom: 12,
   },
   catGrid: {
@@ -157,43 +159,44 @@ const styles = StyleSheet.create({
     width: '47%',
     padding: 12,
     borderRadius: 12,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#131F24',
     alignItems: 'center',
     gap: 6,
     borderWidth: 1.5,
-    borderColor: 'transparent',
+    borderColor: '#1A2B26',
   },
   catTileActive: {
-    backgroundColor: colors.coalBlue,
-    borderColor: colors.safetyAmber,
+    backgroundColor: colors.emeraldMuted,
+    borderColor: colors.emerald,
   },
   catTileText: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.coalBlue,
+    color: colors.textSecondary,
   },
   catTileTextActive: {
-    color: '#FFF',
+    color: colors.emerald,
   },
   sevOption: {
     padding: 14,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#CBD5E1',
+    borderColor: '#1E293B',
+    backgroundColor: '#131F24',
     marginBottom: 8,
   },
   sevText: {
     fontSize: 14,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   camBox: {
     height: 120,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: colors.safetyAmber,
+    borderColor: colors.emerald,
     borderStyle: 'dashed',
-    backgroundColor: '#FFFBEB',
+    backgroundColor: colors.emeraldMuted,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 6,
@@ -201,14 +204,16 @@ const styles = StyleSheet.create({
   camText: {
     fontSize: 14,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
   },
   textArea: {
     borderWidth: 1.5,
-    borderColor: '#CBD5E1',
+    borderColor: '#1E293B',
     borderRadius: 12,
     padding: 12,
     fontSize: 15,
     textAlignVertical: 'top',
+    backgroundColor: '#131F24',
+    color: colors.textPrimary,
   },
 });

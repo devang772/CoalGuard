@@ -39,7 +39,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 24,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -56,18 +56,18 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: '900',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
     textAlign: 'center',
   },
   refCode: {
     fontSize: 18,
     fontWeight: '800',
-    color: colors.safetyAmberDark,
+    color: colors.emerald,
     marginTop: 6,
   },
   subText: {
     fontSize: 15,
-    color: '#64748B',
+    color: colors.textSecondary,
     textAlign: 'center',
     marginTop: 10,
     lineHeight: 22,

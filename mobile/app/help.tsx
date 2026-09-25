@@ -36,7 +36,7 @@ export default function HelpScreen() {
         <View key={i} style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.iconCircle}>
-              <Feather name={t.icon as any} size={22} color={colors.safetyAmberDark} />
+              <Feather name={t.icon as any} size={22} color={colors.emerald} />
             </View>
             <Text style={styles.cardTitle}>{t.title}</Text>
           </View>
@@ -50,26 +50,27 @@ export default function HelpScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
+    minHeight: '100%',
   },
   title: {
     fontSize: 24,
     fontWeight: '900',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   subTitle: {
     fontSize: 14,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginBottom: 16,
     marginTop: 2,
   },
   card: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 16,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -81,18 +82,20 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: colors.safetyAmberLight,
+    backgroundColor: colors.emeraldMuted,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.emeraldBorder,
   },
   cardTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   cardDesc: {
     fontSize: 14,
-    color: '#475569',
+    color: colors.textSecondary,
     lineHeight: 20,
   },
 });
