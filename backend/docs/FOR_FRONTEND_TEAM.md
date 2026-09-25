@@ -13,8 +13,8 @@ Branch: `backend` · Folder: `backend/` · Live API docs (when running): **http:
 | 3. Mine profile, applicable obligations, tasks, map | ✅ | org tree, mines list/detail, mine profile, applicable obligations, tasks (list/summary/complete), calendar, compliance %, map boundaries + pins |
 | 4. Inspections, findings, CAPA, approvals | ✅ | checklists, inspections (start/findings/submit/list/detail), CAPA board (list/summary/detail/assign/"I fixed it"), approve/reject with two-person rule |
 | 5. Satya Proof, before/after closure, audit | ✅ | photo upload + trust score with reasons, signed image links, automatic before/after closure checks, audit history + "Verify Chain" |
-| 6. Contractors, workers, attendance, fraud | ⏳ next | |
-| 7. Field reports, SOS, grievances, notifications, sync | ⏳ | |
+| 6. Contractors, workers, attendance, fraud | ✅ | contractors (list, 360, add/edit, alerts, score), workers (list, add/edit/deactivate), attendance (self + gate mode, monitor, summary, my attendance) |
+| 7. Field reports, SOS, grievances, notifications, sync | ⏳ next | |
 | 8. Reminders + escalation | ⏳ | |
 | 9. Dashboards, leaderboard, reports | ⏳ | |
 
@@ -540,3 +540,122 @@ returned `id`. Keep the photo's capture-time metadata; don't read GPS at sync ti
   Table names: `capas, findings, inspections, compliance_tasks, mine_profiles, mine_obligations, obligations,
   approvals, evidence, observations, grievances, contractors, workers, attendance, …`.
 - Only changes made **through the app** are recorded one by one. The sample data appears as one `seed` entry.
+
+---
+
+### Module 6: Contractors, workers, attendance, ghost-worker alerts ✅
+Rebuild your local database and re-seed (new attendance columns).
+
+#### Screens you can now connect
+| Screen | Endpoints |
+|---|---|
+| Web: Contractors list (score, licence chips, alert badge) | `GET /contractors` |
+| Web: Contractor 360 (alerts panel, stats, tabs) | `GET /contractors/{id}`, `GET /contractors/{id}/alerts` |
+| Web: Add / edit contractor | `POST /contractors`, `PATCH /contractors/{id}` |
+| Web: Workers tab (+ add / edit / deactivate) | `GET /contractors/{id}/workers`, `POST /contractors/{id}/workers`, `GET/PATCH /workers/{id}` |
+| Web: Attendance Monitor (KPI chips + table) | `GET /attendance/summary`, `GET /attendance` |
+| Mobile: Attendance (worker, selfie) | `POST /evidence` (selfie) → `POST /attendance` with `mode: "self"` |
+| Mobile: Gate kiosk mode (supervisor / contractor admin) | `GET /contractors/{id}/workers` (search) → `POST /attendance` with `mode: "gate"` |
+| Mobile: My Attendance history | `GET /attendance/me` |
+
+#### Who can do what
+| Action | Roles |
+|---|---|
+| See contractors / workers / attendance | `supervisor, safety_officer, mine_manager, area_gm, subsidiary_admin, cil_admin, regulator, contractor_admin` (a contractor admin sees **only their own company**; others see contractors of mines in their area). Workers get `403`. |
+| Add / edit contractors | `mine_manager, subsidiary_admin, cil_admin` |
+| Add / edit / deactivate workers | the same + `contractor_admin` (own company) |
+| Attendance, self mode | a user whose login is linked to a worker record (demo: `9000000009` Birsa Hansda) |
+| Attendance, gate mode | `supervisor, safety_officer, mine_manager` (mines in their area), `contractor_admin` (own workers) |
+
+#### Contractors
+- `GET /contractors?org_id=&mine_id=&q=&licence_status=valid|expiring|expired` → **lowest score first**:
+```json
+{"id": 2, "name": "Maa Tara Mining Works", "licence_no": "CLRA/MOON/2025/102",
+ "licence_valid_till": "2028-04-18", "licence_status": "valid",
+ "insurance_valid_till": "2027-04-20", "insurance_status": "valid",
+ "pf_code": "JHRAN1002", "esi_code": "ESI2002", "mine_id": 4, "mine_name": "Moonidih UG", "admin_user_id": null,
+ "workers_count": 52, "alerts_count": 7, "high_alerts": 6, "score": 3.0}
+```
+  `*_status` ∈ `valid | expiring (≤ 30 days) | expired | unknown`. Score 0–100: each alert costs high 15 / medium 7 / low 3.
+- `GET /contractors/{id}` → the same + `stats` + `alerts`:
+```json
+"stats": {"workers_total": 52, "workers_active": 52,
+          "training": {"valid": 50, "expired": 2}, "medical": {"valid": 49, "expired": 3},
+          "below_min_wage": 3,
+          "attendance_30d": {"valid": 928, "invalid": 60, "without_gate_entry": 290}}
+```
+  In `training` / `medical`, a missing status key means 0.
+- `GET /contractors/{id}/alerts` → the alerts list (also inside the 360):
+```json
+{"id": "shared_device-2", "contractor_id": 2, "type": "shared_device", "severity": "high",
+ "title": "Workers sharing one phone",
+ "description": "17 workers use the same phone (DEV-SHARED-7F3A). One person may be marking attendance for others.",
+ "worker_ids": [41, 42, 43], "count": 17}
+```
+  Alert `type`s: `shared_device, shared_bank, no_gate_entry, attendance_spike, expired_training, expired_medical,
+  below_min_wage, licence_expired, licence_expiring, insurance_expired, insurance_expiring`.
+  (This differs slightly from the old prompt: `expired_licence` became `licence_expired`, and there are new types.)
+  (`worker_ids` is shortened here; the API lists all 17.) Show `title` + `description`; "View workers" can
+  filter the Workers tab by `worker_ids`.
+- `POST /contractors` body `{name, licence_no, licence_valid_till, insurance_valid_till, pf_code, esi_code, mine_id, admin_user_id}`
+  → `201` + 360. `PATCH /contractors/{id}` with any of those fields (not `mine_id`).
+  The OCR autofill (`/ai/ocr`, ML teammate) can pre-fill this form.
+
+#### Workers
+- `GET /contractors/{id}/workers?active=true&q=&flag=shared_device` →
+```json
+{"id": 41, "contractor_id": 2, "contractor_name": "Maa Tara Mining Works", "user_id": null,
+ "name": "Rekha Barik", "phone": "7000000041", "device_id": "DEV-SHARED-7F3A",
+ "bank_account_on_file": true,
+ "training_valid_till": "2028-01-06", "training_status": "valid",
+ "medical_valid_till": "2028-01-31", "medical_status": "valid",
+ "daily_wage": 510.0, "below_min_wage": false, "is_active": true,
+ "attendance_days_30d": 21, "flags": ["no_gate_entry", "shared_device"]}
+```
+  `flags` = the alert types this worker is part of (red chips in the table).
+- **Privacy:** the bank account number is never returned (only `bank_account_on_file`). It's stored as a keyed
+  fingerprint, so duplicates can be detected but the number can't be read back. Don't show or cache it after the form is sent.
+- `POST /contractors/{id}/workers` body `{name, phone, device_id, bank_account, training_valid_till, medical_valid_till, daily_wage}`.
+- `PATCH /workers/{id}` any of those + `is_active` (`false` = deactivate). `GET /workers/{id}` → one worker.
+
+#### Attendance
+- `POST /attendance` body:
+```json
+{"mode": "self", "worker_id": null, "lat": 23.7406, "lng": 86.348, "accuracy": 9,
+ "selfie_evidence_id": 1901, "device_id": "PHONE-1", "is_mocked": false, "client_uuid": "..."}
+```
+  In gate mode send `"mode": "gate"` and the `worker_id`. Response `201` (or `200` for a retry / a gate entry added):
+```json
+{"id": 41210, "worker_id": 1, "worker_name": "Birsa Hansda", "contractor_id": 1,
+ "contractor_name": "Shree Ganesh Enterprises", "mine_id": 4, "mine_name": "Moonidih UG",
+ "time": "2026-09-26T01:06:00", "lat": 23.7406, "lng": 86.348,
+ "valid": false, "reason": "You are 2.2 km outside Moonidih UG.", "gate_entry": false, "source": "self",
+ "selfie_evidence_id": 1901,
+ "checks": [{"name": "Worker is active", "passed": true, "detail": "Active."},
+            {"name": "Contractor licence valid", "passed": true, "detail": "Valid."},
+            {"name": "Safety training valid", "passed": true, "detail": "Valid."},
+            {"name": "Medical fitness valid", "passed": true, "detail": "Valid."},
+            {"name": "No fake GPS", "passed": true, "detail": "OK."},
+            {"name": "Inside the mine boundary", "passed": false, "detail": "You are 2.2 km outside Moonidih UG."},
+            {"name": "Selfie passed Satya Proof", "passed": true, "detail": "Trust score 100."}],
+ "message": "Attendance NOT accepted: You are 2.2 km outside Moonidih UG."}
+```
+  - Show `message` big: green when `valid`, red when not, with the failed `checks` below.
+  - **Invalid attempts are saved** (evidence of the attempt). The worker can try again once fixed.
+  - Only **one valid record per day**: a second self-mark → `409` "Attendance already marked today at 6:36 AM."
+    A **gate scan after a self-mark** returns `200` and sets `gate_entry: true` on that record.
+  - `403` messages: login not linked to a worker · marking someone else · gate mode without the role · worker outside
+    your area / not in your company. `422`: gate mode without `worker_id`.
+- `GET /attendance?org_id=&mine_id=&contractor_id=&date=YYYY-MM-DD&valid=&gate_entry=&page=&page_size=` →
+  paginated records for one day (default today), newest first.
+- `GET /attendance/summary?org_id=&mine_id=&date=` →
+  `{"date": "2026-09-26", "present": 89, "invalid": 8, "without_gate_entry": 8, "outside_boundary": 6, "expired_training": 2}`
+- `GET /attendance/me?from=&to=` → the worker's own records (default last 30 days). `404` if the login isn't linked to a worker.
+- Times are UTC; show them in IST. `time` = when it was marked.
+
+#### Demo stories (seed 42)
+Ranking: **Maa Tara Mining Works score 3** (shared phone ×17, shared bank, 290 records without gate entry,
+attendance spikes up to 47 vs ~34, 3 workers at ₹310/day) · **Damodar Transport Co.** (Kusunda, many expired
+trainings) · **Hazaribagh Contractors** (licence expired; its workers' attendance is refused with
+"Contractor licence expired … work not allowed") · **Jharkhand Earthmovers** (licence expiring) ·
+**Shree Ganesh Enterprises** best, at 93.

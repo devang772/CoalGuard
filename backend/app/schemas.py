@@ -426,3 +426,141 @@ class ApprovalCreate(BaseModel):
         if self.decision == "reject" and not (self.remark and self.remark.strip()):
             raise ValueError("A remark is required when rejecting")
         return self
+
+
+# ---------------------------------------------------------------- contractors, workers, attendance
+
+Validity = Literal["valid", "expiring", "expired", "unknown"]
+
+
+class FraudAlert(BaseModel):
+    id: str
+    contractor_id: int
+    type: str
+    severity: Literal["low", "medium", "high"]
+    title: str
+    description: str
+    worker_ids: list[int]
+    count: int
+
+
+class ContractorOut(BaseModel):
+    id: int
+    name: str
+    licence_no: str
+    licence_valid_till: date | None
+    licence_status: Validity
+    insurance_valid_till: date | None
+    insurance_status: Validity
+    pf_code: str | None
+    esi_code: str | None
+    mine_id: int
+    mine_name: str
+    admin_user_id: int | None
+    workers_count: int
+    alerts_count: int
+    high_alerts: int
+    score: float
+
+
+class ContractorDetail(ContractorOut):
+    stats: dict
+    alerts: list[FraudAlert]
+
+
+class ContractorIn(BaseModel):
+    name: str = Field(min_length=2, max_length=150)
+    licence_no: str = Field(min_length=2, max_length=60)
+    licence_valid_till: date | None = None
+    insurance_valid_till: date | None = None
+    pf_code: str | None = Field(default=None, max_length=40)
+    esi_code: str | None = Field(default=None, max_length=40)
+    mine_id: int
+    admin_user_id: int | None = None
+
+
+class ContractorUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=150)
+    licence_no: str | None = Field(default=None, min_length=2, max_length=60)
+    licence_valid_till: date | None = None
+    insurance_valid_till: date | None = None
+    pf_code: str | None = Field(default=None, max_length=40)
+    esi_code: str | None = Field(default=None, max_length=40)
+    admin_user_id: int | None = None
+
+
+class WorkerOut(BaseModel):
+    id: int
+    contractor_id: int | None
+    contractor_name: str | None
+    user_id: int | None
+    name: str
+    phone: str | None
+    device_id: str | None
+    bank_account_on_file: bool
+    training_valid_till: date | None
+    training_status: Validity
+    medical_valid_till: date | None
+    medical_status: Validity
+    daily_wage: float | None
+    below_min_wage: bool
+    is_active: bool
+    attendance_days_30d: int
+    flags: list[str]
+
+
+class WorkerIn(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    phone: str | None = Field(default=None, max_length=15)
+    device_id: str | None = Field(default=None, max_length=100)
+    bank_account: str | None = Field(default=None, min_length=6, max_length=34,
+                                     description="stored only as a keyed fingerprint, never as the number")
+    training_valid_till: date | None = None
+    medical_valid_till: date | None = None
+    daily_wage: float | None = Field(default=None, ge=0, le=100_000)
+
+
+class WorkerUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    phone: str | None = Field(default=None, max_length=15)
+    device_id: str | None = Field(default=None, max_length=100)
+    bank_account: str | None = Field(default=None, min_length=6, max_length=34)
+    training_valid_till: date | None = None
+    medical_valid_till: date | None = None
+    daily_wage: float | None = Field(default=None, ge=0, le=100_000)
+    is_active: bool | None = None
+
+
+class AttendanceMark(BaseModel):
+    worker_id: int | None = Field(default=None, description="gate mode: the worker being marked; self mode: omit")
+    mode: Literal["self", "gate"] = "self"
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lng: float | None = Field(default=None, ge=-180, le=180)
+    accuracy: float | None = None
+    selfie_evidence_id: int | None = None
+    device_id: str | None = Field(default=None, max_length=100)
+    is_mocked: bool = False
+    client_uuid: str | None = Field(default=None, max_length=64)
+
+
+class AttendanceOut(BaseModel):
+    id: int
+    worker_id: int
+    worker_name: str
+    contractor_id: int | None
+    contractor_name: str | None
+    mine_id: int
+    mine_name: str
+    time: datetime
+    lat: float | None
+    lng: float | None
+    valid: bool
+    reason: str | None
+    gate_entry: bool
+    source: str
+    selfie_evidence_id: int | None
+
+
+class AttendanceResult(AttendanceOut):
+    checks: list[dict]
+    message: str

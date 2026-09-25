@@ -13,8 +13,9 @@ Branch: `backend` · Folder: `backend/` · Your code goes in `backend/app/ai/` a
 | 3. Mine profile + obligations + tasks | ✅ | **Calls your `recommend_obligations(profile)`** and **your `predict_risk(db, mine_ids)`** (both optional; safe fallbacks) |
 | 4. Inspections, findings, CAPA | ✅ | findings/CAPAs now also created through the API; new CAPA columns; `approvals` table filled |
 | 5. Satya Proof + audit | ✅ | **Calls your `verify_hazard_gone()`** during CAPA closure; real photo files + trust scores; audit history |
-| 6. Contractors, attendance, fraud | ⏳ next | ghost-worker rules (you may add ML on top) |
-| 7–9 | ⏳ | dashboards reuse `predict_risk()` |
+| 6. Contractors, attendance, fraud | ✅ | rule-based ghost-worker / labour alerts = your baseline; new attendance columns |
+| 7. Field reports, SOS, grievances, sync | ⏳ next | voice reports will use your `/ai/voice` output shape |
+| 8–9 | ⏳ | dashboards reuse `predict_risk()` |
 
 ---
 
@@ -294,3 +295,43 @@ the finding, trust ≥ 60.
 If your code **writes** to the database (e.g. saving obligations), use the ORM (`db.add`, attribute changes,
 `db.delete`) and not bulk `update()`/`delete()` statements. Only ORM changes are recorded in the audit chain;
 bulk statements would later show up as "changed outside the app" (a false tamper alarm).
+
+---
+
+### Module 6: Contractors, workers, attendance, ghost-worker alerts ✅
+**Rebuild your local DB and re-seed** (new attendance columns).
+
+#### Rule-based alerts = your baseline (`app/services/fraud.py → contractor_alerts(db, contractor_ids)`)
+Plain rules per contractor over active workers and recent attendance:
+| type | rule |
+|---|---|
+| `shared_device` | ≥ 2 workers with the same `workers.device_id`, or self-marked attendance from one device by several workers (last 30 d) |
+| `shared_bank` | ≥ 2 workers with the same `bank_acc_hash` |
+| `no_gate_entry` | ≥ 5 valid records without gate entry in 30 d (high when ≥ 20) |
+| `attendance_spike` | in the last 60 d, a day's valid count > median × 1.25 **and** ≥ median + 8 (needs ≥ 10 days of data) |
+| `expired_training` | active workers with expired training (high if any of them tried to enter) |
+| `expired_medical` | active workers with an expired medical examination |
+| `below_min_wage` | `daily_wage < settings.min_daily_wage` (450, sample value) |
+| `licence_expired/_expiring`, `insurance_expired/_expiring` | validity dates (expiring = within 30 days) |
+
+Score = 100 − (15 per high, 7 per medium, 3 per low alert). With seed 42: **Maa Tara Mining Works 3** (7 alerts:
+17 on one phone, 2 on one bank account, 290 no-gate records, spikes on 4 days up to 47 vs a usual ~34,
+3 workers at ₹310), Damodar Transport Co. 63, Hazaribagh Contractors 70, best is Shree Ganesh Enterprises 93.
+
+**Where ML can add value** (optional, your call):
+- Your **attendance anomaly** detector (plan feature 4) can be compared with `attendance_spike`. It should at least
+  find the same Maa Tara days, and maybe subtler ones the fixed thresholds miss.
+- Ideas the rules don't cover: the same selfie face / look-alike selfie across workers (`attendance.selfie_evidence_id` →
+  `evidence.phash`), workers always marked within seconds of each other on one device, an unusual time of day.
+- If you add an ML alert, return it in the same alert shape (`id, contractor_id, type, severity, title, description,
+  worker_ids, count`) and tell the backend team; it can be merged into `contractor_alerts`.
+
+#### Table changes
+- **`attendance`**: new `source` (`self` = worker's phone · `gate` = kiosk scan) and `marked_by` (user id).
+  `gate_entry` is true for gate scans (or when a gate scan is added to an earlier self-mark).
+  Invalid attempts are stored with `valid=false` and `reason` (all failed rules joined by "; "), e.g.
+  "Safety training expired on 10 Aug 2026: contact your supervisor." · "You are 2.2 km outside Moonidih UG." ·
+  "Contractor licence expired on … : work not allowed." · "Fake GPS (mock location) app detected.".
+- **`workers.bank_acc_hash`**: new accounts are stored as HMAC-SHA256 with a server secret (seeded ones are plain
+  SHA-256 of a fake value). Only compare hashes for equality; there's nothing to decode.
+- Seeded attendance rows have `source='self'`. The ghost-shift extras have `gate_entry=false`, and so do ~30% of Maa Tara's regular records.

@@ -11,7 +11,7 @@ Built with **FastAPI + PostgreSQL**.
 | 3 | Mine profile, applicable obligations, compliance tasks, map data | ✅ Done |
 | 4 | Inspections, findings, CAPA, approvals | ✅ Done |
 | 5 | Satya Proof, before/after closure, tamper-proof audit | ✅ Done |
-| 6 | Contractors, workers, attendance, fraud rules | ⏳ |
+| 6 | Contractors, workers, attendance, fraud rules | ✅ Done |
 | 7 | Field reports, SOS, grievances, notifications, offline sync | ⏳ |
 | 8 | Reminders and escalation ladder | ⏳ |
 | 9 | Dashboards, leaderboard, reports, final tests | ⏳ |
@@ -120,6 +120,8 @@ app/
     evidence.py        # evidence locker: file storage, signed image links, placeholder
     geo.py             # distances, inside-the-mine-boundary check
     audit.py           # automatic hash-chained history of every change + verify
+    workforce.py       # validity status, bank-account fingerprint, attendance rules
+    fraud.py           # ghost-worker / labour-compliance alerts + contractor score
   deps.py        # shared router helpers (mine-in-scope check, filters, pagination)
 seed/bootstrap.py  # org tree (CIL > 3 subsidiaries > 6 areas > 12 mines) + demo users + escalation rules
 seed/generate.py   # 6 months of sample activity with planted patterns
@@ -187,5 +189,12 @@ def recommend_obligations(profile: dict) -> list[dict]:
 | GET | `/evidence/{id}/file` | the image (signed link or Bearer token) |
 | GET | `/audit/verify` | verify the history chain + detect edits made outside the app |
 | GET | `/audit/recent`, `/audit/{table}/{id}` | recent changes / full history of one record |
+| GET, POST | `/contractors` | contractors ranked by score (lowest first) / add one |
+| GET, PATCH | `/contractors/{id}` | Contractor 360 (stats + alerts + score) / edit |
+| GET | `/contractors/{id}/alerts` | ghost-worker + labour-compliance alerts |
+| GET, POST | `/contractors/{id}/workers` | workers with validity + flags / add one |
+| GET, PATCH | `/workers/{id}` | one worker / edit or deactivate |
+| POST | `/attendance` | mark attendance (self with selfie, or gate kiosk) with reasons |
+| GET | `/attendance`, `/attendance/summary`, `/attendance/me` | monitor / KPI counts / own history |
 
 Full request/response details: [docs/FOR_FRONTEND_TEAM.md](docs/FOR_FRONTEND_TEAM.md).

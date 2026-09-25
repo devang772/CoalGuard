@@ -485,7 +485,8 @@ class Generator:
                 valid, reason = False, "Outside mine boundary (about 2 km away)"
             rows.append(dict(worker_id=worker["id"], mine_id=mine.id, time=when, lat=lat, lng=lng,
                              accuracy=round(self.rng.uniform(5, 25), 1), selfie_evidence_id=None,
-                             device_id=worker["device_id"], gate_entry=gate, valid=valid, reason=reason,
+                             device_id=worker["device_id"], gate_entry=gate, source="self", marked_by=None,
+                             valid=valid, reason=reason,
                              created_at=when))
 
         for mine in self.mines:

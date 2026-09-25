@@ -345,6 +345,8 @@ class Attendance(TimestampMixin, Base):
     selfie_evidence_id: Mapped[int | None] = mapped_column(ForeignKey("evidence.id"))
     device_id: Mapped[str | None] = mapped_column(String(100))
     gate_entry: Mapped[bool] = mapped_column(Boolean, default=False)
+    source: Mapped[str] = mapped_column(String(10), default="self")      # self (worker's phone) / gate (kiosk)
+    marked_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     valid: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     reason: Mapped[str | None] = mapped_column(String(300))
     client_uuid: Mapped[str | None] = mapped_column(String(64), unique=True)
