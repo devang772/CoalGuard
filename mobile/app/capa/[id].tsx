@@ -72,35 +72,38 @@ export default function CapaDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
+    minHeight: '100%',
   },
   imageCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 18,
     overflow: 'hidden',
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   photoTag: {
-    backgroundColor: colors.coalBlue,
-    color: colors.safetyAmber,
+    backgroundColor: colors.cardBackground,
+    color: colors.emerald,
     fontSize: 12,
     fontWeight: '800',
     paddingHorizontal: 12,
     paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.cardBorder,
   },
   beforePhoto: {
     width: '100%',
     height: 220,
   },
   card: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 18,
     padding: 18,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   headerRow: {
     flexDirection: 'row',
@@ -120,23 +123,23 @@ const styles = StyleSheet.create({
   dueText: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.coalBlue,
+    color: colors.textSecondary,
   },
   desc: {
     fontSize: 18,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
     lineHeight: 24,
   },
   catText: {
     fontSize: 13,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginTop: 6,
   },
   sectionHeader: {
     fontSize: 15,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
     marginTop: 16,
     marginBottom: 10,
   },
@@ -157,16 +160,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.warningLight,
   },
   nodePending: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#131F24',
   },
   nodeText: {
     fontSize: 11,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   timelineLine: {
     flex: 1,
     height: 2,
-    backgroundColor: '#CBD5E1',
+    backgroundColor: '#1E293B',
   },
 });

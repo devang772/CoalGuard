@@ -1,11 +1,13 @@
+import { UserRole } from '../lib/rbac';
+
 export interface User {
   id: string;
   name: string;
   phone: string;
-  role: 'worker' | 'supervisor' | 'safety_officer' | 'mine_manager' | 'contractor_admin';
+  role: UserRole;
   org_unit_id: string;
-  mine_id: string;
-  mine_name: string;
+  mine_id: string | null;
+  mine_name: string | null;
   language: string;
 }
 

@@ -7,8 +7,8 @@ export interface UserProfile {
   phone: string;
   role: UserRole;
   org_unit_id: string;
-  mine_id: string;
-  mine_name: string;
+  mine_id: string | null;
+  mine_name: string | null;
   language: string;
 }
 
@@ -71,11 +71,11 @@ export const DEMO_USERS: Record<string, UserProfile> = {
 };
 
 export const useAuthStore = create<AuthState>((set) => ({
-  user: DEMO_USERS.safety_officer, // Default demo user prefilled for hackathon demo speed
-  token: 'mock-jwt-token-12345',
-  isAuthenticated: true,
+  user: null,
+  token: null,
+  isAuthenticated: false,
   isAppLocked: false,
-  hasOnboardedPermissions: true,
+  hasOnboardedPermissions: false,
   selectedLanguage: 'hi',
 
   login: (user, token) =>

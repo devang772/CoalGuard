@@ -119,15 +119,16 @@ export default function SyncStatusScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
+    minHeight: '100%',
   },
   card: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 18,
     padding: 18,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   statusHeader: {
     flexDirection: 'row',
@@ -137,11 +138,11 @@ const styles = StyleSheet.create({
   statusTitle: {
     fontSize: 17,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   timeText: {
     fontSize: 13,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginTop: 4,
   },
   countsGrid: {
@@ -170,36 +171,36 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 17,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
     marginBottom: 12,
   },
   emptyBox: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 30,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   emptyTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
     marginTop: 10,
   },
   emptySub: {
     fontSize: 13,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginTop: 4,
     textAlign: 'center',
   },
   itemCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 14,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   itemHeader: {
     flexDirection: 'row',
@@ -207,13 +208,15 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   kindTag: {
-    backgroundColor: colors.coalBlue,
+    backgroundColor: '#131F24',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.emeraldBorder,
   },
   kindText: {
-    color: colors.safetyAmber,
+    color: colors.emerald,
     fontSize: 11,
     fontWeight: '800',
   },
@@ -225,11 +228,11 @@ const styles = StyleSheet.create({
   itemUuid: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   itemTime: {
     fontSize: 11,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   errorText: {
@@ -244,7 +247,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
+    borderTopColor: colors.cardBorder,
   },
   retryBtn: {
     flexDirection: 'row',
@@ -254,7 +257,7 @@ const styles = StyleSheet.create({
   retryText: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.info,
+    color: colors.emerald,
   },
   delBtn: {
     flexDirection: 'row',

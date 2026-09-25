@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { compressAndWatermarkPhoto } from '../src/lib/evidence';
@@ -9,11 +9,15 @@ import { colors } from '../src/theme/colors';
 export default function CameraScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { locationSimulation } = useSettingsStore();
+  const { locationSimulation, setLastCapturedPhoto } = useSettingsStore();
 
   const [capturedUri, setCapturedUri] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [gpsAccuracy, setGpsAccuracy] = useState(8);
+  const [hasWebcamPermission, setHasWebcamPermission] = useState<boolean | null>(null);
+
+  const videoRef = useRef<any>(null);
+  const streamRef = useRef<any>(null);
 
   const isInside = locationSimulation === 'inside';
   const isMocked = locationSimulation === 'mock_gps';
@@ -22,26 +26,68 @@ export default function CameraScreen() {
   const mockLat = 23.7505;
   const mockLng = 86.4205;
 
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.mediaDevices) {
+      navigator.mediaDevices
+        .getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } })
+        .then((stream) => {
+          streamRef.current = stream;
+          setHasWebcamPermission(true);
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.play().catch(() => {});
+          }
+        })
+        .catch((err) => {
+          console.warn('[Camera] PC Webcam access error:', err);
+          setHasWebcamPermission(false);
+        });
+    }
+
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track: any) => track.stop());
+      }
+    };
+  }, []);
+
   const handleCapture = async () => {
     setIsProcessing(true);
-    // Simulated in-app capture photo URI
-    const mockUri = 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=800';
-    const compressed = await compressAndWatermarkPhoto(mockUri, {
+    let rawUri = 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=800';
+
+    if (Platform.OS === 'web' && videoRef.current && hasWebcamPermission) {
+      try {
+        const video = videoRef.current;
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          rawUri = canvas.toDataURL('image/jpeg', 0.85);
+        }
+      } catch (e) {
+        console.warn('[Camera] Canvas snapshot error:', e);
+      }
+    }
+
+    const compressed = await compressAndWatermarkPhoto(rawUri, {
       latitude: mockLat,
       longitude: mockLng,
       accuracy: gpsAccuracy,
       deviceTime: new Date().toISOString(),
-      deviceId: 'DEV-ANDROID-NETRA-01',
+      deviceId: Platform.OS === 'web' ? 'DEV-PC-WEBCAM-01' : 'DEV-MOBILE-NETRA-01',
       isMocked,
       mineName: 'Moonidih UG',
       userName: 'Ramesh Sharma',
     });
+
     setCapturedUri(compressed);
+    setLastCapturedPhoto(compressed);
     setIsProcessing(false);
   };
 
   const handleConfirmPhoto = () => {
-    // Navigate back to calling route with camera evidence result
     router.back();
   };
 
@@ -50,11 +96,11 @@ export default function CameraScreen() {
       {/* Top Satya Proof Metadata Overlay */}
       <View style={styles.topOverlay}>
         <View style={styles.overlayRow}>
-          <Feather name="clock" size={14} color={colors.safetyAmber} />
+          <Feather name="clock" size={14} color={colors.emerald} />
           <Text style={styles.overlayText}>{new Date().toLocaleTimeString()} IST</Text>
         </View>
         <View style={styles.overlayRow}>
-          <Feather name="map-pin" size={14} color={colors.safetyAmber} />
+          <Feather name="map-pin" size={14} color={colors.emerald} />
           <Text style={styles.overlayText}>
             {mockLat.toFixed(4)} N, {mockLng.toFixed(4)} E (±{gpsAccuracy}m)
           </Text>
@@ -67,18 +113,42 @@ export default function CameraScreen() {
         </View>
       </View>
 
-      {/* Camera Viewfinder Mock */}
+      {/* Camera Viewfinder */}
       <View style={styles.viewfinder}>
         {capturedUri ? (
           <Image source={{ uri: capturedUri }} style={styles.previewImage} resizeMode="cover" />
         ) : (
           <View style={styles.mockLens}>
+            {Platform.OS === 'web' && (
+              <video
+                ref={(el) => {
+                  videoRef.current = el;
+                  if (el && streamRef.current) {
+                    el.srcObject = streamRef.current;
+                    el.play().catch(() => {});
+                  }
+                }}
+                autoPlay
+                playsInline
+                muted
+                style={{
+                  position: 'absolute',
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                }}
+              />
+            )}
             {ghostOverlay && (
-              <Image source={{ uri: ghostOverlay }} style={[styles.previewImage, { opacity: 0.35 }]} />
+              <Image source={{ uri: ghostOverlay }} style={[styles.previewImage, { opacity: 0.35, position: 'absolute' }]} />
             )}
             <View style={styles.reticle} />
             <Text style={styles.viewfinderHint}>
-              {ghostOverlay ? 'Ghost Overlay Active · Align Before-Photo Scene' : 'Satya Proof Camera · Frame Hazard Scene'}
+              {ghostOverlay
+                ? 'Ghost Overlay Active · Align Before-Photo Scene'
+                : hasWebcamPermission === false
+                ? 'PC Webcam Blocked · Using Satya Fallback Camera'
+                : 'Satya Proof PC Camera Active · Frame Hazard / Selfie'}
             </Text>
           </View>
         )}
@@ -94,7 +164,7 @@ export default function CameraScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.useBtn} onPress={handleConfirmPhoto}>
-              <Feather name="check" size={20} color="#0F172A" />
+              <Feather name="check" size={20} color="#05080A" />
               <Text style={styles.useText}>Use Photo</Text>
             </TouchableOpacity>
           </View>
@@ -126,11 +196,13 @@ const styles = StyleSheet.create({
     top: 40,
     left: 16,
     right: 16,
-    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    backgroundColor: 'rgba(13, 21, 24, 0.9)',
     borderRadius: 14,
     padding: 12,
     zIndex: 10,
     gap: 6,
+    borderWidth: 1,
+    borderColor: '#1A2B26',
   },
   overlayRow: {
     flexDirection: 'row',
@@ -146,6 +218,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
+    overflow: 'hidden',
   },
   previewImage: {
     width: '100%',
@@ -154,27 +228,35 @@ const styles = StyleSheet.create({
   mockLens: {
     flex: 1,
     width: '100%',
-    backgroundColor: '#0F172A',
+    backgroundColor: '#05080A',
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
   },
   reticle: {
     width: 240,
     height: 240,
     borderWidth: 2,
-    borderColor: colors.safetyAmber,
+    borderColor: colors.emerald,
     borderRadius: 16,
     borderStyle: 'dashed',
+    zIndex: 2,
   },
   viewfinderHint: {
     color: '#94A3B8',
     fontSize: 14,
     marginTop: 20,
     fontWeight: '600',
+    zIndex: 2,
+    backgroundColor: 'rgba(5, 8, 10, 0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
   bottomControls: {
     padding: 30,
-    backgroundColor: 'rgba(0,0,0,0.9)',
+    backgroundColor: 'rgba(5, 8, 10, 0.95)',
+    zIndex: 10,
   },
   captureRow: {
     flexDirection: 'row',
@@ -185,9 +267,11 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#334155',
+    backgroundColor: '#131F24',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#1A2B26',
   },
   triggerCircle: {
     width: 76,
@@ -202,7 +286,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: colors.safetyAmber,
+    backgroundColor: colors.emerald,
   },
   confirmRow: {
     flexDirection: 'row',
@@ -212,11 +296,13 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 52,
     borderRadius: 12,
-    backgroundColor: '#334155',
+    backgroundColor: '#131F24',
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
+    borderWidth: 1,
+    borderColor: '#1A2B26',
   },
   retakeText: {
     color: '#FFF',
@@ -227,14 +313,14 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 52,
     borderRadius: 12,
-    backgroundColor: colors.safetyAmber,
+    backgroundColor: colors.emerald,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
   },
   useText: {
-    color: '#0F172A',
+    color: '#05080A',
     fontSize: 16,
     fontWeight: '800',
   },

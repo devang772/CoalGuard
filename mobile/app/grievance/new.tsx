@@ -69,6 +69,7 @@ export default function NewGrievanceScreen() {
           multiline
           numberOfLines={4}
           placeholder="Describe issue, dates, or details..."
+          placeholderTextColor="#64748B"
           value={text}
           onChangeText={setText}
         />
@@ -78,7 +79,7 @@ export default function NewGrievanceScreen() {
             <Text style={styles.switchTitle}>Hide My Name 🔒 (Anonymous)</Text>
             <Text style={styles.switchSub}>Your identity will NOT be shared with contractor or officers.</Text>
           </View>
-          <Switch value={anonymous} onValueChange={setAnonymous} trackColor={{ true: colors.safetyAmber }} />
+          <Switch value={anonymous} onValueChange={setAnonymous} trackColor={{ true: colors.emerald }} />
         </View>
       </View>
 
@@ -108,31 +109,32 @@ export default function NewGrievanceScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
+    minHeight: '100%',
   },
   title: {
     fontSize: 24,
     fontWeight: '900',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   subTitle: {
     fontSize: 14,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginBottom: 16,
     marginTop: 2,
   },
   card: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   label: {
     fontSize: 15,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
     marginBottom: 10,
   },
   grid: {
@@ -144,28 +146,33 @@ const styles = StyleSheet.create({
     width: '48%',
     padding: 12,
     borderRadius: 12,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#131F24',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   catBtnActive: {
-    backgroundColor: colors.coalBlue,
+    backgroundColor: colors.emeraldMuted,
+    borderColor: colors.emerald,
   },
   catText: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.coalBlue,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   catTextActive: {
-    color: colors.safetyAmber,
+    color: colors.emerald,
   },
   textArea: {
     borderWidth: 1.5,
-    borderColor: '#CBD5E1',
+    borderColor: '#1E293B',
     borderRadius: 12,
     padding: 12,
     fontSize: 15,
     textAlignVertical: 'top',
+    backgroundColor: '#131F24',
+    color: colors.textPrimary,
   },
   switchRow: {
     flexDirection: 'row',
@@ -173,20 +180,20 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
+    borderTopColor: colors.cardBorder,
   },
   switchTitle: {
     fontSize: 15,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   switchSub: {
     fontSize: 12,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   tokenCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 18,
     padding: 20,
     alignItems: 'center',
@@ -196,26 +203,28 @@ const styles = StyleSheet.create({
   tokenTitle: {
     fontSize: 20,
     fontWeight: '900',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
     marginTop: 8,
   },
   tokenSub: {
     fontSize: 13,
-    color: '#64748B',
+    color: colors.textSecondary,
     textAlign: 'center',
     marginTop: 4,
   },
   tokenBadge: {
-    backgroundColor: colors.coalBlue,
+    backgroundColor: '#131F24',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 12,
     marginTop: 14,
+    borderWidth: 1,
+    borderColor: colors.emeraldBorder,
   },
   tokenText: {
     fontSize: 26,
     fontWeight: '900',
-    color: colors.safetyAmber,
+    color: colors.emerald,
     letterSpacing: 2,
   },
 });

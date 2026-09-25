@@ -40,10 +40,10 @@ export default function AttendanceHistoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
   },
   card: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 14,
     padding: 14,
     marginBottom: 10,
@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   iconCircle: {
     width: 36,
@@ -69,11 +69,11 @@ const styles = StyleSheet.create({
   dateText: {
     fontSize: 15,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   mineText: {
     fontSize: 12,
-    color: '#64748B',
+    color: colors.textSecondary,
   },
   reasonText: {
     fontSize: 12,

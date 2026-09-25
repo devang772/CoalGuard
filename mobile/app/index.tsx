@@ -10,10 +10,10 @@ export default function IndexScreen() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (!isAuthenticated) {
+      if (!hasOnboardedPermissions) {
         router.replace('/(auth)/language' as any);
-      } else if (!hasOnboardedPermissions) {
-        router.replace('/(auth)/permissions' as any);
+      } else if (!isAuthenticated) {
+        router.replace('/(auth)/login' as any);
       } else {
         router.replace('/(tabs)/home' as any);
       }

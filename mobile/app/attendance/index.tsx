@@ -64,7 +64,7 @@ export default function AttendanceScreen() {
               style={[styles.workerRow, selectedWorker.id === w.id && styles.workerSelected]}
               onPress={() => setSelectedWorker(w)}
             >
-              <Feather name="user" size={18} color={colors.coalBlue} />
+              <Feather name="user" size={18} color={selectedWorker.id === w.id ? colors.emerald : colors.textSecondary} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.workerName}>{w.name}</Text>
                 <Text style={styles.contractorName}>{w.contractor_name}</Text>
@@ -90,7 +90,7 @@ export default function AttendanceScreen() {
               router.push('/camera' as any);
             }}
           >
-            <Feather name="camera" size={36} color={colors.safetyAmberDark} />
+            <Feather name="camera" size={36} color={colors.emerald} />
             <Text style={styles.selfieText}>Take Verification Selfie</Text>
           </TouchableOpacity>
         )}
@@ -130,20 +130,21 @@ export default function AttendanceScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
+    minHeight: '100%',
   },
   card: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   label: {
     fontSize: 15,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
     marginBottom: 10,
   },
   workerRow: {
@@ -152,30 +153,30 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 12,
     borderRadius: 10,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#131F24',
     marginBottom: 6,
   },
   workerSelected: {
-    backgroundColor: colors.safetyAmberLight,
+    backgroundColor: colors.emeraldMuted,
     borderWidth: 1.5,
-    borderColor: colors.safetyAmber,
+    borderColor: colors.emeraldBorder,
   },
   workerName: {
     fontSize: 15,
     fontWeight: '700',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   contractorName: {
     fontSize: 12,
-    color: '#64748B',
+    color: colors.textSecondary,
   },
   selfiePlaceholder: {
     height: 180,
     borderRadius: 14,
     borderWidth: 2,
-    borderColor: colors.safetyAmber,
+    borderColor: colors.emerald,
     borderStyle: 'dashed',
-    backgroundColor: '#FFFBEB',
+    backgroundColor: colors.emeraldMuted,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
@@ -183,7 +184,7 @@ const styles = StyleSheet.create({
   selfieText: {
     fontSize: 15,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
   },
   selfieImage: {
     width: '100%',
@@ -214,7 +215,7 @@ const styles = StyleSheet.create({
   },
   resultReason: {
     fontSize: 13,
-    color: '#334155',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   historyLink: {
@@ -224,6 +225,6 @@ const styles = StyleSheet.create({
   historyText: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.info,
+    color: colors.emerald,
   },
 });

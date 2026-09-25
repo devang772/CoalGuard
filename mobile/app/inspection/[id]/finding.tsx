@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Image } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { BigButton } from '../../../src/components/BigButton';
+import { useSettingsStore } from '../../../src/store/settings';
+import { addFindingApi } from '../../../src/api/endpoints';
 import { colors } from '../../../src/theme/colors';
 
 const CATEGORIES = [
@@ -30,7 +32,16 @@ export default function AddFindingScreen() {
   const [description, setDescription] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
 
-  const handleSaveFinding = () => {
+  useFocusEffect(
+    useCallback(() => {
+      const { lastCapturedPhoto } = useSettingsStore.getState();
+      if (lastCapturedPhoto) {
+        setPhotoUri(lastCapturedPhoto);
+      }
+    }, [])
+  );
+
+  const handleSaveFinding = async () => {
     if (!description && !photoUri) {
       Alert.alert('Required Info', 'Please provide a finding description or photo proof.');
       return;
@@ -57,7 +68,7 @@ export default function AddFindingScreen() {
               <Feather
                 name={cat.icon as any}
                 size={22}
-                color={selectedCat === cat.key ? colors.safetyAmber : colors.coalBlue}
+                color={selectedCat === cat.key ? colors.emerald : colors.textSecondary}
               />
               <Text style={[styles.catTileText, selectedCat === cat.key && styles.catTileTextActive]}>
                 {cat.label}
@@ -88,16 +99,20 @@ export default function AddFindingScreen() {
       <View style={styles.card}>
         <Text style={styles.label}>Proof Photo (In-App Camera)</Text>
         {photoUri ? (
-          <Image source={{ uri: photoUri }} style={{ width: '100%', height: 160, borderRadius: 12 }} />
+          <TouchableOpacity onPress={() => router.push('/camera' as any)}>
+            <Image source={{ uri: photoUri }} style={{ width: '100%', height: 180, borderRadius: 12 }} />
+            <Text style={{ color: colors.emerald, fontWeight: '700', marginTop: 6, textAlign: 'center' }}>
+              Retake Satya Proof Photo
+            </Text>
+          </TouchableOpacity>
         ) : (
           <TouchableOpacity
             style={styles.camBox}
             onPress={() => {
-              setPhotoUri('https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=600');
               router.push('/camera' as any);
             }}
           >
-            <Feather name="camera" size={32} color={colors.safetyAmberDark} />
+            <Feather name="camera" size={32} color={colors.emerald} />
             <Text style={styles.camText}>Take Satya Proof Photo</Text>
           </TouchableOpacity>
         )}
@@ -108,6 +123,7 @@ export default function AddFindingScreen() {
           multiline
           numberOfLines={3}
           placeholder="Describe hazard location and risk details..."
+          placeholderTextColor="#64748B"
           value={description}
           onChangeText={setDescription}
         />
@@ -121,31 +137,32 @@ export default function AddFindingScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
+    minHeight: '100%',
   },
   title: {
     fontSize: 24,
     fontWeight: '900',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   subTitle: {
     fontSize: 14,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginBottom: 16,
     marginTop: 2,
   },
   card: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   label: {
     fontSize: 15,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
     marginBottom: 12,
   },
   catGrid: {
@@ -157,43 +174,44 @@ const styles = StyleSheet.create({
     width: '47%',
     padding: 12,
     borderRadius: 12,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#131F24',
     alignItems: 'center',
     gap: 6,
     borderWidth: 1.5,
-    borderColor: 'transparent',
+    borderColor: '#1A2B26',
   },
   catTileActive: {
-    backgroundColor: colors.coalBlue,
-    borderColor: colors.safetyAmber,
+    backgroundColor: colors.emeraldMuted,
+    borderColor: colors.emerald,
   },
   catTileText: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.coalBlue,
+    color: colors.textSecondary,
   },
   catTileTextActive: {
-    color: '#FFF',
+    color: colors.emerald,
   },
   sevOption: {
     padding: 14,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#CBD5E1',
+    borderColor: '#1E293B',
+    backgroundColor: '#131F24',
     marginBottom: 8,
   },
   sevText: {
     fontSize: 14,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   camBox: {
     height: 120,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: colors.safetyAmber,
+    borderColor: colors.emerald,
     borderStyle: 'dashed',
-    backgroundColor: '#FFFBEB',
+    backgroundColor: colors.emeraldMuted,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 6,
@@ -201,14 +219,16 @@ const styles = StyleSheet.create({
   camText: {
     fontSize: 14,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
   },
   textArea: {
     borderWidth: 1.5,
-    borderColor: '#CBD5E1',
+    borderColor: '#1E293B',
     borderRadius: 12,
     padding: 12,
     fontSize: 15,
     textAlignVertical: 'top',
+    backgroundColor: '#131F24',
+    color: colors.textPrimary,
   },
 });

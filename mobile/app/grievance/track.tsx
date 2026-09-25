@@ -1,18 +1,28 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { BigButton } from '../../src/components/BigButton';
+import { trackGrievanceApi } from '../../src/api/endpoints';
+import { GrievanceItem } from '../../src/api/types';
 import { colors } from '../../src/theme/colors';
 
 export default function TrackGrievanceScreen() {
   const params = useLocalSearchParams();
   const [tokenInput, setTokenInput] = useState((params.token as string) || 'GRV-7F3K');
-  const [searched, setSearched] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [grievanceData, setGrievanceData] = useState<GrievanceItem | null>(null);
 
-  const handleTrack = () => {
-    setSearched(true);
+  const handleTrack = async () => {
+    if (!tokenInput.trim()) return;
+    setLoading(true);
+    const res = await trackGrievanceApi(tokenInput.trim());
+    setGrievanceData(res);
+    setLoading(false);
   };
+
+  useEffect(() => {
+    handleTrack();
+  }, []);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -33,17 +43,19 @@ export default function TrackGrievanceScreen() {
         </View>
       </View>
 
-      {searched && (
+      {loading ? (
+        <ActivityIndicator size="large" color={colors.emerald} style={{ marginTop: 30 }} />
+      ) : grievanceData ? (
         <View style={styles.card}>
           <View style={styles.headerRow}>
-            <Text style={styles.tokenLabel}>Token: {tokenInput}</Text>
+            <Text style={styles.tokenLabel}>Token: {grievanceData.token}</Text>
             <View style={styles.statusBadge}>
-              <Text style={styles.statusText}>IN PROGRESS</Text>
+              <Text style={styles.statusText}>{grievanceData.status.toUpperCase()}</Text>
             </View>
           </View>
 
-          <Text style={styles.catText}>Category: Safety & PPE Compliance</Text>
-          <Text style={styles.subText}>Submitted on: 24 Sep 2026 · Confidential</Text>
+          <Text style={styles.catText}>Category: {grievanceData.category.toUpperCase()}</Text>
+          <Text style={styles.subText}>Updated: {new Date(grievanceData.updated_at).toLocaleDateString()} · Confidential</Text>
 
           {/* Status Stepper */}
           <Text style={styles.sectionTitle}>Resolution Stepper</Text>
@@ -54,45 +66,57 @@ export default function TrackGrievanceScreen() {
               </View>
               <View style={styles.stepTextCol}>
                 <Text style={styles.stepTitle}>Grievance Registered</Text>
-                <Text style={styles.stepTime}>24 Sep, 10:15 AM</Text>
+                <Text style={styles.stepTime}>{new Date(grievanceData.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
               </View>
             </View>
 
             <View style={styles.stepLine} />
 
             <View style={styles.stepRow}>
-              <View style={[styles.stepCircle, styles.stepActive]}>
-                <Feather name="clock" size={14} color={colors.coalBlue} />
+              <View style={[styles.stepCircle, grievanceData.status !== 'new' ? styles.stepDone : styles.stepActive]}>
+                <Feather name={grievanceData.status !== 'new' ? "check" : "clock"} size={14} color="#FFF" />
               </View>
               <View style={styles.stepTextCol}>
-                <Text style={styles.stepTitle}>Assigned to Area Safety Officer</Text>
-                <Text style={styles.stepTime}>25 Sep, 09:30 AM</Text>
+                <Text style={styles.stepTitle}>Assigned to Officer</Text>
+                <Text style={styles.stepTime}>{grievanceData.status !== 'new' ? 'In Review' : 'Pending'}</Text>
               </View>
             </View>
 
             <View style={styles.stepLine} />
 
             <View style={styles.stepRow}>
-              <View style={[styles.stepCircle, styles.stepPending]}>
-                <Text style={{ color: '#94A3B8', fontWeight: '800' }}>3</Text>
+              <View style={[styles.stepCircle, grievanceData.status === 'resolved' ? styles.stepDone : styles.stepPending]}>
+                {grievanceData.status === 'resolved' ? (
+                  <Feather name="check" size={14} color="#FFF" />
+                ) : (
+                  <Text style={{ color: '#94A3B8', fontWeight: '800' }}>3</Text>
+                )}
               </View>
               <View style={styles.stepTextCol}>
-                <Text style={[styles.stepTitle, { color: '#94A3B8' }]}>Resolution & Action Taken</Text>
-                <Text style={styles.stepTime}>Pending officer review</Text>
+                <Text style={[styles.stepTitle, { color: grievanceData.status === 'resolved' ? colors.textPrimary : '#94A3B8' }]}>
+                  Resolution & Action Taken
+                </Text>
+                <Text style={styles.stepTime}>{grievanceData.status === 'resolved' ? 'Resolved' : 'Pending review'}</Text>
               </View>
             </View>
           </View>
 
           {/* Officer Response */}
-          <View style={styles.responseBox}>
-            <Feather name="message-circle" size={18} color={colors.info} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.respTitle}>Officer Note:</Text>
-              <Text style={styles.respBody}>
-                Safety Officer inspecting Seam 3 ventilation equipment today. Corrective action report pending.
-              </Text>
+          {grievanceData.response && (
+            <View style={styles.responseBox}>
+              <Feather name="message-circle" size={18} color={colors.info} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.respTitle}>Officer Note:</Text>
+                <Text style={styles.respBody}>{grievanceData.response}</Text>
+              </View>
             </View>
-          </View>
+          )}
+        </View>
+      ) : (
+        <View style={styles.card}>
+          <Text style={{ color: colors.textSecondary, textAlign: 'center' }}>
+            No grievance record found for token "{tokenInput}".
+          </Text>
         </View>
       )}
     </ScrollView>
@@ -102,20 +126,21 @@ export default function TrackGrievanceScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
+    minHeight: '100%',
   },
   card: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   label: {
     fontSize: 15,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
     marginBottom: 8,
   },
   inputRow: {
@@ -125,18 +150,20 @@ const styles = StyleSheet.create({
   tokenInput: {
     flex: 1,
     borderWidth: 1.5,
-    borderColor: '#CBD5E1',
+    borderColor: '#1E293B',
     borderRadius: 12,
     paddingHorizontal: 14,
     fontSize: 18,
     fontWeight: '800',
     letterSpacing: 1,
+    backgroundColor: '#131F24',
+    color: colors.textPrimary,
   },
   searchBtn: {
     width: 48,
     height: 48,
     borderRadius: 12,
-    backgroundColor: colors.coalBlue,
+    backgroundColor: colors.emerald,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -149,7 +176,7 @@ const styles = StyleSheet.create({
   tokenLabel: {
     fontSize: 18,
     fontWeight: '900',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   statusBadge: {
     backgroundColor: colors.warningLight,
@@ -165,17 +192,17 @@ const styles = StyleSheet.create({
   catText: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   subText: {
     fontSize: 12,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   sectionTitle: {
     fontSize: 15,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
     marginTop: 18,
     marginBottom: 12,
   },
@@ -198,10 +225,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success,
   },
   stepActive: {
-    backgroundColor: colors.safetyAmber,
+    backgroundColor: colors.emerald,
   },
   stepPending: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#1E293B',
   },
   stepTextCol: {
     flex: 1,
@@ -209,16 +236,16 @@ const styles = StyleSheet.create({
   stepTitle: {
     fontSize: 14,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   stepTime: {
     fontSize: 12,
-    color: '#64748B',
+    color: colors.textSecondary,
   },
   stepLine: {
     width: 2,
     height: 20,
-    backgroundColor: '#CBD5E1',
+    backgroundColor: '#1E293B',
     marginLeft: 13,
     marginVertical: 2,
   },
@@ -237,7 +264,7 @@ const styles = StyleSheet.create({
   },
   respBody: {
     fontSize: 13,
-    color: '#1E293B',
+    color: colors.textPrimary,
     marginTop: 2,
   },
 });

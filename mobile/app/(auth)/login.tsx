@@ -20,7 +20,7 @@ export default function LoginScreen() {
     try {
       const res = await loginApi(phone, password);
       login(res.user, res.access_token);
-      router.replace('/(auth)/permissions' as any);
+      router.replace('/(tabs)/home' as any);
     } catch (e: any) {
       Alert.alert('Login Error', e.message || 'Unable to authenticate');
     } finally {
@@ -31,7 +31,7 @@ export default function LoginScreen() {
   const quickLoginRole = (roleKey: keyof typeof DEMO_USERS) => {
     const user = DEMO_USERS[roleKey];
     login(user, 'mock-jwt-token');
-    router.replace('/(auth)/permissions' as any);
+    router.replace('/(tabs)/home' as any);
   };
 
   return (

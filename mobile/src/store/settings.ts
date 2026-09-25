@@ -12,6 +12,7 @@ interface SettingsState {
   sosSmsNumber: string;
   locationSimulation: LocationSimulation;
   forceOffline: boolean;
+  lastCapturedPhoto: string | null;
 
   setThemeMode: (mode: ThemeMode) => void;
   setFontSizeMode: (size: FontSizeMode) => void;
@@ -20,6 +21,7 @@ interface SettingsState {
   setSosSmsNumber: (num: string) => void;
   setLocationSimulation: (sim: LocationSimulation) => void;
   setForceOffline: (offline: boolean) => void;
+  setLastCapturedPhoto: (photo: string | null) => void;
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -30,6 +32,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   sosSmsNumber: '+919800001122',
   locationSimulation: 'inside', // Default: inside Moonidih UG
   forceOffline: false,
+  lastCapturedPhoto: null,
 
   setThemeMode: (themeMode) => set({ themeMode }),
   setFontSizeMode: (fontSizeMode) => set({ fontSizeMode }),
@@ -38,4 +41,5 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setSosSmsNumber: (sosSmsNumber) => set({ sosSmsNumber }),
   setLocationSimulation: (locationSimulation) => set({ locationSimulation }),
   setForceOffline: (forceOffline) => set({ forceOffline }),
+  setLastCapturedPhoto: (lastCapturedPhoto) => set({ lastCapturedPhoto }),
 }));

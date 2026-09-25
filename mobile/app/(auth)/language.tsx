@@ -20,7 +20,7 @@ export default function LanguageScreen() {
   const handleSelect = (code: string) => {
     i18n.changeLanguage(code);
     setSelectedLanguage(code);
-    router.push('/(auth)/login' as any);
+    router.push('/(auth)/permissions' as any);
   };
 
   return (

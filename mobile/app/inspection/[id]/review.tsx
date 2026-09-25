@@ -45,7 +45,7 @@ export default function ReviewInspectionScreen() {
             <Text style={[styles.metricLabel, { color: colors.danger }]}>Not OK</Text>
           </View>
 
-          <View style={[styles.metricItem, { backgroundColor: '#F1F5F9' }]}>
+          <View style={[styles.metricItem, { backgroundColor: '#131F24' }]}>
             <Text style={styles.metricNum}>0</Text>
             <Text style={styles.metricLabel}>N/A</Text>
           </View>
@@ -77,31 +77,32 @@ export default function ReviewInspectionScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
+    minHeight: '100%',
   },
   title: {
     fontSize: 24,
     fontWeight: '900',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   subTitle: {
     fontSize: 14,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginBottom: 20,
     marginTop: 2,
   },
   card: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   cardTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
     marginBottom: 14,
   },
   metricsGrid: {
@@ -112,29 +113,29 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 12,
     borderRadius: 12,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#131F24',
     alignItems: 'center',
   },
   metricNum: {
     fontSize: 20,
     fontWeight: '900',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   metricLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#64748B',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   findingRow: {
     flexDirection: 'row',
     gap: 12,
     alignItems: 'center',
-    backgroundColor: '#FFFBEB',
+    backgroundColor: colors.emeraldMuted,
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.safetyAmber,
+    borderColor: colors.emeraldBorder,
   },
   sevDot: {
     width: 10,
@@ -145,11 +146,11 @@ const styles = StyleSheet.create({
   findingDesc: {
     fontSize: 14,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   findingSub: {
     fontSize: 11,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginTop: 2,
     fontWeight: '700',
   },

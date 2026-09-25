@@ -50,7 +50,7 @@ export default function VoiceReportScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       {/* Language Indicator */}
       <View style={styles.langHeader}>
-        <Feather name="globe" size={16} color={colors.safetyAmberDark} />
+        <Feather name="globe" size={16} color={colors.emerald} />
         <Text style={styles.langText}>
           Language: {selectedLanguage.toUpperCase()} (Hindi / English / Bengali / Odia)
         </Text>
@@ -62,7 +62,7 @@ export default function VoiceReportScreen() {
         /* AI Parsing Confirmation Screen */
         <View style={styles.aiCard}>
           <View style={styles.aiHeader}>
-            <Feather name="cpu" size={24} color={colors.safetyAmberDark} />
+            <Feather name="cpu" size={24} color={colors.emerald} />
             <Text style={styles.aiTitle}>Here is what AI understood:</Text>
           </View>
 
@@ -117,30 +117,32 @@ export default function VoiceReportScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
     minHeight: '100%',
   },
   langHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.safetyAmberLight,
+    backgroundColor: colors.emeraldMuted,
     padding: 10,
     borderRadius: 12,
     gap: 8,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.emeraldBorder,
   },
   langText: {
     fontSize: 13,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
   },
   aiCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 20,
     padding: 20,
     borderWidth: 1.5,
-    borderColor: colors.safetyAmber,
+    borderColor: colors.cardBorder,
   },
   aiHeader: {
     flexDirection: 'row',
@@ -151,22 +153,22 @@ const styles = StyleSheet.create({
   aiTitle: {
     fontSize: 18,
     fontWeight: '900',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   label: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.coalBlue,
+    color: colors.emerald,
     marginBottom: 4,
   },
   input: {
     borderWidth: 1.5,
-    borderColor: '#CBD5E1',
+    borderColor: '#1E293B',
     borderRadius: 12,
     padding: 12,
     fontSize: 15,
-    color: '#0F172A',
-    backgroundColor: '#F8FAFC',
+    color: colors.textPrimary,
+    backgroundColor: '#131F24',
   },
   chipRow: {
     flexDirection: 'row',
@@ -174,15 +176,17 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   chip: {
-    backgroundColor: colors.coalBlue,
+    backgroundColor: '#131F24',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   chipLabel: {
     fontSize: 12,
     fontWeight: '800',
-    color: colors.safetyAmber,
+    color: colors.emerald,
   },
   reRecordBtn: {
     paddingVertical: 12,
@@ -191,6 +195,6 @@ const styles = StyleSheet.create({
   reRecordText: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.info,
+    color: colors.emerald,
   },
 });

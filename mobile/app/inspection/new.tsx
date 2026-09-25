@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { BigButton } from '../../src/components/BigButton';
+import { startInspectionApi } from '../../src/api/endpoints';
 import { MOCK_CHECKLISTS } from '../../src/api/mock/data';
 import { colors } from '../../src/theme/colors';
 
@@ -12,9 +13,21 @@ export default function StartInspectionScreen() {
   const router = useRouter();
   const [selectedType, setSelectedType] = useState(TYPES[0]);
   const [selectedChecklist, setSelectedChecklist] = useState(MOCK_CHECKLISTS[0].id);
+  const [starting, setStarting] = useState(false);
 
-  const handleStart = () => {
-    router.push(`/inspection/insp-101/index?checklistId=${selectedChecklist}` as any);
+  const handleStart = async () => {
+    setStarting(true);
+    let inspId = 'insp-101';
+    try {
+      const typeKey = selectedType.includes('DGMS') ? 'dgms' : selectedType.includes('SPCB') ? 'spcb' : 'internal';
+      const chkNum = parseInt(selectedChecklist.replace('chk-', ''), 10) || 1;
+      const res = await startInspectionApi(1, typeKey, chkNum);
+      if (res?.id) inspId = String(res.id);
+    } catch (err: any) {
+      console.warn('[StartInspection] Start API failed, using fallback:', err.message);
+    }
+    setStarting(false);
+    router.push(`/inspection/${inspId}?checklistId=${selectedChecklist}` as any);
   };
 
   return (
@@ -72,45 +85,48 @@ export default function StartInspectionScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
+    minHeight: '100%',
   },
   title: {
     fontSize: 24,
     fontWeight: '900',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   subTitle: {
     fontSize: 14,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginBottom: 20,
     marginTop: 2,
   },
   card: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   label: {
     fontSize: 15,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
     marginBottom: 12,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: colors.safetyAmberLight,
+    backgroundColor: colors.emeraldMuted,
     padding: 12,
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.emeraldBorder,
   },
   valueText: {
     fontSize: 15,
     fontWeight: '700',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   radioRow: {
     flexDirection: 'row',
@@ -122,26 +138,28 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   radioActive: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: colors.emeraldMuted,
+    borderWidth: 1,
+    borderColor: colors.emeraldBorder,
   },
   radioCircle: {
     width: 20,
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#94A3B8',
+    borderColor: '#64748B',
   },
   radioCircleActive: {
-    borderColor: colors.safetyAmber,
-    backgroundColor: colors.safetyAmber,
+    borderColor: colors.emerald,
+    backgroundColor: colors.emerald,
   },
   radioText: {
     fontSize: 15,
     fontWeight: '700',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   itemCount: {
     fontSize: 12,
-    color: '#64748B',
+    color: colors.textSecondary,
   },
 });

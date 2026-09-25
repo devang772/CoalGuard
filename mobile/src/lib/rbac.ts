@@ -3,6 +3,10 @@ export type UserRole =
   | 'supervisor'
   | 'safety_officer'
   | 'mine_manager'
+  | 'area_gm'
+  | 'subsidiary_admin'
+  | 'cil_admin'
+  | 'regulator'
   | 'contractor_admin';
 
 export interface TabConfig {

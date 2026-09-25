@@ -160,7 +160,7 @@ export default function HomeScreen() {
               <Feather name="chevron-right" size={20} color="#64748B" />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.workerTile} onPress={() => router.push('/attendance/index' as any)}>
+            <TouchableOpacity style={styles.workerTile} onPress={() => router.push('/attendance' as any)}>
               <View style={styles.tileIconCircle}>
                 <Feather name="user-check" size={24} color={colors.emerald} />
               </View>

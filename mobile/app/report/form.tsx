@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Switch, Image } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Switch, Image, ActivityIndicator } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { BigButton } from '../../src/components/BigButton';
+import { useSettingsStore } from '../../src/store/settings';
+import { submitObservationApi } from '../../src/api/endpoints';
 import { colors } from '../../src/theme/colors';
 
 const REPORT_TYPES = [
@@ -19,11 +21,36 @@ export default function FormReportScreen() {
   const [exactSpot, setExactSpot] = useState('Seam 3, Level 2 Junction');
   const [anonymous, setAnonymous] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = () => {
+  useFocusEffect(
+    useCallback(() => {
+      const { lastCapturedPhoto } = useSettingsStore.getState();
+      if (lastCapturedPhoto) {
+        setPhotoUri(lastCapturedPhoto);
+      }
+    }, [])
+  );
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    const res = await submitObservationApi({
+      type: reportType as any,
+      category: 'roof',
+      text: description || `${reportType} reported at ${exactSpot}`,
+      severity: reportType === 'incident' ? 'critical' : 'medium',
+      location_text: exactSpot,
+      lat: 23.7505,
+      lng: 86.4205,
+      anonymous,
+      photoUri,
+      source: 'app',
+    });
+    setSubmitting(false);
+
     router.push({
       pathname: '/report/success' as any,
-      params: { refId: 'REP-' + Math.floor(10000 + Math.random() * 90000) },
+      params: { refId: res?.id || ('REP-' + Math.floor(10000 + Math.random() * 90000)) },
     });
   };
 
@@ -103,31 +130,32 @@ export default function FormReportScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
+    minHeight: '100%',
   },
   title: {
     fontSize: 24,
     fontWeight: '900',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
   subTitle: {
     fontSize: 14,
-    color: '#64748B',
+    color: colors.textSecondary,
     marginBottom: 16,
     marginTop: 2,
   },
   card: {
-    backgroundColor: '#FFF',
+    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.cardBorder,
   },
   label: {
     fontSize: 15,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
     marginBottom: 10,
   },
   typeGrid: {
@@ -139,42 +167,49 @@ const styles = StyleSheet.create({
     width: '48%',
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#131F24',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   typeBtnActive: {
-    backgroundColor: colors.coalBlue,
+    backgroundColor: colors.emeraldMuted,
+    borderColor: colors.emerald,
   },
   typeBtnText: {
     fontSize: 14,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.textSecondary,
   },
   typeBtnTextActive: {
-    color: colors.safetyAmber,
+    color: colors.emerald,
   },
   input: {
     borderWidth: 1.5,
-    borderColor: '#CBD5E1',
+    borderColor: '#1E293B',
     borderRadius: 12,
     padding: 12,
     fontSize: 15,
+    backgroundColor: '#131F24',
+    color: colors.textPrimary,
   },
   textArea: {
     borderWidth: 1.5,
-    borderColor: '#CBD5E1',
+    borderColor: '#1E293B',
     borderRadius: 12,
     padding: 12,
     fontSize: 15,
     textAlignVertical: 'top',
+    backgroundColor: '#131F24',
+    color: colors.textPrimary,
   },
   photoBox: {
     height: 120,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: colors.safetyAmber,
+    borderColor: colors.emerald,
     borderStyle: 'dashed',
-    backgroundColor: '#FFFBEB',
+    backgroundColor: colors.emeraldMuted,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 6,
@@ -182,7 +217,7 @@ const styles = StyleSheet.create({
   photoText: {
     fontSize: 14,
     fontWeight: '800',
-    color: colors.coalBlue,
+    color: colors.emerald,
   },
   switchRow: {
     flexDirection: 'row',
@@ -191,11 +226,11 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
+    borderTopColor: colors.cardBorder,
   },
   switchLabel: {
     fontSize: 15,
     fontWeight: '700',
-    color: colors.coalBlue,
+    color: colors.textPrimary,
   },
 });
