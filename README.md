@@ -1,233 +1,144 @@
-# 🛡️ CoalGuard (Khanan Netra) — Smart Governance & Compliance Monitoring Platform
+# CoalGuard — AI-Powered Mine Intelligence & Governance Platform
 
-> **AI-Powered Command Center for Indian Coal Mines (Ministry of Coal / Coal India Limited)**  
-> Developed for **Smart India Hackathon (SIH)** — Automated statutory compliance, Satya Proof anti-fraud verification, ML rule synthesis, and real-time risk intelligence.
+> **AI-Driven Safety, Geospatial Intelligence, and DGMS Compliance Governance for Modern Coal Mines.**
 
----
-
-## 📌 Executive Summary
-
-**CoalGuard (Khanan Netra)** is an enterprise-grade web command center built for Mine Managers, Safety Officers, Area General Managers, Subsidiary Admins, CIL Corporate Executives, and DGMS/SPCB Regulators. It replaces paper-based safety registers with an intelligent, automated compliance management system powered by AI/ML.
+CoalGuard combines **Artificial Intelligence**, **Computer Vision**, **Geospatial Intelligence (GIS)**, **3D Digital Twins**, and **IoT Sensor Telemetry** to transform mine safety, regulatory compliance, and operational risk management into a real-time, predictive intelligence loop.
 
 ---
 
-## 🌟 Key Features & Module Overview Page-by-Page
+## 📌 Problem Statement & Core Vision
+
+Traditional open-pit and underground mining safety management suffers from fragmented manual reporting, delayed hazard detection, paper-heavy regulatory audits, and disconnected field teams. 
+
+**CoalGuard** solves this by establishing a unified digital command center:
+1. **Predictive Risk over Reactive Response**: AI engines process real-time sensor streams and terrain data to alert mine managers to slope instability, gas accumulation, or vehicle collisions *before* incidents happen.
+2. **Automated DGMS Compliance**: Instant compliance scoring against Directorate General of Mines Safety (DGMS) regulations, ISO 45001, and environmental frameworks.
+3. **End-to-End Field Visibility**: Connects field inspectors with safety officers through mobile evidence capture, real-time alert dispatching, and geospatial digital twins.
 
 ---
 
-### 1. 🌐 Landing Page (`/` · `index.tsx`)
-* **Hero Banner & Command Gateway:** High-impact hero section showcasing the platform motto, quick access links to the Central Command Center, and live system metrics.
-* **Live System Metrics Counter:** Real-time counters displaying 12 Monitored Mines, 98.4% Compliance Rate, 0 Unresolved Critical Incidents, and 100% Satya Proof Verification.
-* **Platform Architecture Showcase:** Interactive feature highlights covering Rule-to-Task Automation, Satya Proof Anti-Fraud Verification, Labour Attendance Fraud Detection, Anomaly Detection, GIS Digital Twin, and Ask Netra AI Copilot.
-* **Role-Based Demo Access Gateway:** Quick login previews for CIL Admin, Subsidiary Admin, Area GM, Mine Manager, Safety Officer, DGMS Regulator, and Contractor Admin.
+## ✨ Core Features & Platform Capabilities
+
+### 🌐 1. Public Landing Site (`/`)
+- **Auto-Hiding Shutter Navigation**: Glassmorphic header that slides off-screen smoothly on scroll down and reappears on scroll up.
+- **Interactive Digital Twin Hero**: Real-time HUD showing mine coordinates (`23.7957° N / 86.4304° E`), floating risk pins, and compliance visibility metrics.
+- **Live Animated Metrics**: Scroll-triggered counting statistics (`24+` Mines Onboarded, `10K+` Inspections, `98%` Compliance Visibility, `40%` Faster Issue Resolution).
+- **Interactive AI Architecture Flow**: Step-by-step pipeline visualization from Document AI → OCR → RAG → Compliance Intelligence → Decision Support.
+- **Geospatial 3D Twin Console**: Interactive map viewer with switchable `3D View`, `Thermal Layer`, `Slope Instability`, and `Gas Sensor` layers.
+- **Field Inspector Mobile App Preview**: Simulated mobile interface showing instant geo-tagging and camera evidence upload.
+
+### 📊 2. Mine Command Center Dashboard (`/dashboard`)
+- **Main Command Overview**: Key KPI cards, interactive multi-mine search, live risk heatmap matrix, priority remediation queue, and real-time alert feed.
+- **Mines Management (`MinesView`)**: Grid and Table views for tracking active mine sites, safety scores, risk indices, production capacity, active workers, and GPS locations.
+- **Safety Inspections (`InspectionsView`)**: Digital inspection logs, AI hazard scoring, inspector assignment, status filters (`Pending`, `In Progress`, `Passed`, `Failed`).
+- **DGMS Compliance (`ComplianceView`)**: Regulatory compliance matrices, DGMS score breakdown (ventilation, slope stability, machinery), violation tracker, fine risk forecasting.
+- **AI Risk Intelligence (`RiskIntelligenceView`)**: Predictive risk probabilities for slope failure, gas leaks, haul road hazards, and equipment overheating.
+- **GIS Command Map (`GISMapView`)**: Geospatial command map canvas with interactive map layers (Satellite, Thermal, Hotspots, Gas Sensor Nodes, Field Team locations).
+- **Document Intelligence Hub (`DocumentsView`)**: AI OCR document parser for DGMS circulars, safety logs, and inspection reports with auto-keyword extraction.
+- **Incident Response (`IncidentsView`)**: Real-time incident tracker, severity tags (`Critical`, `High`, `Medium`, `Low`), dispatch field response team workflow.
+- **Reports & Audits (`ReportsView` & `AuditLogsView`)**: Automated DGMS quarterly report generation, PDF exports, and immutable audit logs.
+- **Alert Notifications (`AlertsView`)**: Categorized real-time notifications with emergency audio-visual alert triggers.
+- **User & Role Management (`UsersView`)**: Role-based access control for Mine Managers, Safety Officers, DGMS Auditors, and Field Inspectors.
 
 ---
 
-### 2. 🎛️ Central Command Dashboard (`/dashboard` · `dashboard.tsx`)
+## 🏗 Repository Architecture
 
-#### Top Navigation Header
-* **Global Search Bar:** Instant searching across mines, inspections, incidents, compliance requirements, and regulatory documents.
-* **Hierarchical Scope Switcher:** Dynamic org tree filtering (`All Subsidiaries (CIL)` → `All Areas` → `All Mines`).
-* **User Profile & Account Control:** Compact top-right profile trigger showing user name, org unit, profile settings, system configuration, security audit trail link, and session logout.
-
-#### Interactive Filters & Quick Actions
-* **Multi-Parameter Filter Bar:** Filter dashboard metrics by Mine Site, Risk Level (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`), Compliance Rate (`High >85%`, `Moderate 70-85%`, `Low <70%`), Operational Status, and Date Horizon (`Today`, `7 Days`, `30 Days`, `Custom`).
-* **Quick Action Buttons:** One-click shortcuts to `New Inspection`, `Upload Document`, `Generate Report`, `View GIS Map`, and `Create Alert`.
-
-#### KPI Summary Metrics
-* **Total Monitored Mines Card:** Displays active mine site counts and monthly additions.
-* **Compliance Rate Card:** Shows national compliance percentage with trend indicators and progress bars.
-* **Active Inspections Card:** Counts ongoing field inspections and pending audits.
-* **High-Risk Issues Card:** Highlights critical safety risks requiring immediate intervention.
-* **Open Corrective Actions (CAPAs):** Tracks pending CAPA tickets and SLA overdue warnings.
-* **AI Alerts Card:** Summarizes real-time anomaly alerts generated by the AI engine.
-
-#### Mine Health Overview & Attention Queue
-* **Mine Health Overview Table:** Interactive table listing mine names, locations, compliance progress bars, open issues, risk badges, last inspection dates, operational statuses, and detail view links.
-* **Requires Immediate Attention Panel:** Real-time alert list highlighting slope instability warnings, overdue safety inspections, and missing regulatory documents with quick action buttons (`Acknowledge`, `Assign`, `View Details`).
+```
+CoalGuard/
+├── frontend/                  # React 19 + Vite + TanStack Start UI Application
+│   ├── src/
+│   │   ├── components/        # UI Primitives & Dashboard View Components
+│   │   ├── routes/            # File-based routes (index.tsx, dashboard.tsx)
+│   │   └── styles.css         # Glassmorphic Design System & Animation Engine
+│   ├── README.md              # Frontend & Backend API Integration Contracts
+│   └── package.json
+├── backend/                   # REST & WebSocket API Backend Service (Node.js / FastAPI)
+├── ai-services/              # Computer Vision, OCR & Risk Prediction Services
+├── database/                  # PostgreSQL / PostGIS Schemas & Migration Scripts
+├── .gitignore
+└── README.md                  # Master Project Overview (This File)
+```
 
 ---
 
-### 3. 🗺️ GIS Map & Digital Twin (`GISMapView.tsx`)
-* **Interactive Coalfield Map:** Visual mapping of all CIL subsidiary mines (BCCL Jharia, CCL Piparwar, MCL Talcher, etc.).
-* **GeoJSON Boundary Layers:** Precise polygon perimeters marking mine lease boundaries and pit limits.
-* **Layer Control Toggles:** Switchable map layers for Mine Boundaries, Real-Time Hazard Heatmap, Field Inspection Teams, and Environmental Air Quality Stations.
-* **Mine Inspection Drawer:** Interactive sidebar panel displaying mine coordinates, active hazards, weather alerts, and safety status upon selecting a map node.
+## 🗺 Team Roadmap & Work Distribution
+
+| Component | Status | Responsibilities & Deliverables | Assigned Team |
+| :--- | :---: | :--- | :--- |
+| **Frontend Application** | **COMPLETED ✅** | Built complete UI, landing page, command dashboard, views, glassmorphic styling, animations, responsive design, mock state. | Frontend Engineers |
+| **Backend Services** | **IN PROGRESS 🚀** | Implement REST API endpoints, JWT authentication, PostgreSQL/PostGIS schemas, and WebSocket telemetry server. *(See [`frontend/README.md`](frontend/README.md) for exact API schemas).* | Backend Engineers |
+| **AI / ML Services** | **IN PROGRESS 🚀** | Build computer vision models for slope movement, Tesseract/Llama OCR parser for documents, and risk prediction scoring model. | AI/ML Engineers |
+| **IoT & Sensor Data** | **IN PROGRESS 🚀** | MQTT / LoRaWAN ingestion pipelines for gas sensors (CH4, CO, O2), tilt meters, and weather stations. | IoT/Hardware Engineers |
 
 ---
 
-### 4. 🏆 CIL Safety & Compliance Leaderboard (`LeaderboardView.tsx`)
+## 🔌 API Integration Quick Reference
 
-#### Top 3 Podium Display
-* **Gold #1 Winner Badge:** Dedicated gold card for top-performing mine (Jharia UG Mine) featuring an elongated `🥇 1st` rank pill, winner trophy tag, safety score out of 100, and zero-incident badge.
-* **Silver #2 & Bronze #3 Badges:** Elongated `🥈 2nd` and `🥉 3rd` rank pills highlighting subsidiary performance, compliance rate, and average CAPA closure SLA days.
+For complete backend API schema requirements, request/response JSON payloads, and WebSocket definitions, refer to **[`frontend/README.md`](frontend/README.md)**.
 
-#### Ranked Leaderboard Table
-* **National Ranking Matrix:** Complete tabular ranking based on DGMS safety audits, zero-incident records, compliance percentages, average CAPA SLA closure days, and monthly incident tallies.
-
----
-
-### 5. 📋 Mine Profile & Applicable Obligations (`RuleStudioView.tsx`)
-
-#### Mine Profile Compliance Form
-* **15 Statutory Parameters:**
-  1. `working_method` (Underground `UG`, Open-cast `OC`, `MIXED`)
-  2. `depth_m` (Mine shaft depth in meters)
-  3. `seam_gas_degree` (Degree I, Degree II, Degree III inflammable gas classification)
-  4. `worker_count` (Departmental workers)
-  5. `contract_worker_count` (Contractual workers)
-  6. `production_capacity_mtpa` (Million Tonnes Per Annum)
-  7. `uses_explosives` (Blasting toggle)
-  8. `has_conveyor` (Belt conveyor transport toggle)
-  9. `has_hemm` (Heavy Earth Moving Machinery toggle)
-  10. `has_washery` (Coal washery plant toggle)
-  11. `near_water_body` (Water body proximity <500m toggle)
-  12. `forest_land` (Forest clearance zone toggle)
-  13. `ec_number` (Environmental Clearance number)
-  14. `cto_valid_till` (Consent to Operate expiry date)
-  15. `state` (State jurisdiction)
-* **Automated Rule Synthesis:** Saving the profile automatically invokes the ML engine to evaluate applicable laws (CMR 2017, Mines Act 1952, MoEFCC EC) and generate the task calendar.
-
-#### Applicable Obligations Table (ML Engine Rules)
-* **Rule Matrix:** Code (`SAF-GAS-D`, `ENV-DUST-Q`), Law Reference, Category (`Safety`, `Environment`, `Labour`, `Production`), Frequency (`Daily`, `Weekly`, `Monthly`, `Quarterly`), and Severity (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`).
-* **"Why It Applies" ML Rationale:** Clear explanation box detailing the specific mine profile parameters that triggered the rule.
-* **Source & Confidence Badges:** Distinguishes `ml_engine` generated rules from `rules_fallback` with confidence scores (94% to 99.6%).
-* **Mark Not Applicable Action:** Interactive modal requesting an official statutory/engineering remark before deactivating any obligation.
+### Summary of Key API Endpoints to Implement:
+- **Authentication**: `POST /api/v1/auth/login`, `GET /api/v1/auth/me`
+- **Mines**: `GET /api/v1/mines`, `POST /api/v1/mines`
+- **Inspections**: `GET /api/v1/inspections`, `POST /api/v1/inspections`
+- **Compliance**: `GET /api/v1/compliance/summary`
+- **Risk Intelligence**: `GET /api/v1/risk/predictions`
+- **GIS Sensors**: `GET /api/v1/gis/sensors`
+- **Document AI**: `POST /api/v1/documents/upload`, `GET /api/v1/documents/:id`
+- **Incidents**: `GET /api/v1/incidents`, `PATCH /api/v1/incidents/:id/dispatch`
+- **WebSocket Telemetry**: `ws://localhost:8000/ws/v1/telemetry`
 
 ---
 
-### 6. ⛰️ Mines Administration (`MinesView.tsx`)
-* **Mine Directory Grid & List:** Comprehensive overview of all operating mines across BCCL, CCL, MCL, ECL, WCL, NCL, SECL.
-* **Mine Profile Cards:** Displays subsidiary, area, mine manager in charge, risk level, compliance percentage, total workforce, and daily production metrics.
-* **Navigation Links:** Quick jump to Mine Profile configuration, active field inspections, and GIS map coordinates.
+## 💻 How to Run the Project Locally
 
----
-
-### 7. 🛡️ Inspections & CAPA Satya Proof Board (`InspectionsView.tsx`)
-
-#### CAPA Satya Proof Board
-* **Kanban Ticket Cards:** Displays CAPA ID, finding title, mine location, owner, due countdown, and escalation stage (`L1 Mine Mgr`, `L2 Area GM`, `L3 Subsidiary`).
-* **Light-Themed Trust Score Badges:** High-contrast, clean badges indicating verification status (`Trust: 86/100 Verified` in light green, `Trust: 48/100 Suspicious` in light rose).
-
-#### Interactive Satya Proof Before/After Slider (`BeforeAfterSlider.tsx`)
-* **Draggable Image Comparison:** Dual-layer image slider comparing pre-remediation hazard photos against post-remediation evidence photos.
-* **Light Glassmorphism Timestamp Badges:** High-contrast light overlay pills displaying photo capture dates, GPS verification markers, and Satya Proof status.
-
-#### Automated Satya Proof Integrity Checks
-* **GPS Proximity Distance Check:** Verifies if post-remediation photo was taken within 30m of the original hazard coordinate.
-* **Photo Reuse Anti-Fraud Check:** Scans photo cryptographic hashes against historic databases to prevent recycled image fraud.
-
-#### Action & Approval Controls
-* **Approve & Close CAPA:** Validates Satya Proof checks and writes immutable closure timestamp into the cryptographic audit ledger.
-* **Reject Closure:** Rejects suspicious evidence and escalates ticket to Area GM.
-
----
-
-### 8. 📅 Compliance Calendar & Tasks (`ComplianceView.tsx`)
-* **Scheduled Task Calendar:** Daily, weekly, monthly, and quarterly compliance task schedule auto-generated from mine profile obligations.
-* **Task Filter & Status Badges:** Filter tasks by category (`Safety`, `Environment`, `Labour`, `Production`) and status (`Pending`, `Done`, `Overdue`).
-* **Task Completion Drawer:** Form for field officers to upload evidence photos, enter measurements, and submit task signoffs.
-
----
-
-### 9. 🧠 Risk Intelligence & Anomaly Engine (`RiskIntelligenceView.tsx`)
-
-#### 2x2 Weather & Environmental Anomaly Cards
-1. **Rainfall & Monsoon Flood Warning Card:** Monitors precipitation levels, pit water accumulation, and sump pump capacity.
-2. **Methane Gas Spike Warning Card:** Displays underground gas sensor readings, CH4 concentration spikes, and ventilation fan status.
-3. **Highwall Slope Micro-Movement Card:** Tracks radar InSAR displacement readings, tension crack formations, and slope stability alerts.
-4. **Coal Haulage & Dispatch Discrepancy Card:** Compares pithead production figures against weighbridge dispatch logs to flag pilferage/coal leakage.
-
-* **Predictive Risk Analytics:** Anomaly severity breakdown charts and AI-recommended mitigation actions.
-
----
-
-### 10. 👷 Contractors & Labour Management (`ContractorsView.tsx`)
-* **Contractor Agency Directory:** Profiles of all third-party contractor agencies operating across mine sites.
-* **Licence Expiry Alerts:** Highlights expiring contractor licences (e.g. Jharkhand Earthmovers expiring in 15 days).
-* **Workforce & Compliance Overview:** Tracks active contract workers, PF/ESI registration status, and statutory wage compliance.
-
----
-
-### 11. ⏱️ Attendance Monitor & Fraud Detection (`AttendanceView.tsx`)
-* **Biometric Attendance Logs:** Daily attendance records for departmental and contractual mine workers.
-* **Anti-Fraud Detection Signals:**
-  - **Shared Mobile Device Warning:** Flags multiple worker credential logins (e.g. 17 workers) on a single device (`DEV-SHARED-7F3A`).
-  - **Muster Roll vs. Gate Entry Discrepancy:** Detects attendance spikes without corresponding gate biometric entry logs.
-  - **Under-Wage Payment Flags:** Highlights workers paid below statutory minimum wage (e.g. ₹310/day vs ₹450 minimum).
-
----
-
-### 12. 🗣️ Grievance Redressal System (`GrievancesView.tsx`)
-* **Worker & Contractor Grievances:** Central ticketing board for mine worker complaints categorized by `Wages`, `Safety`, `Harassment`, `Facilities`, and `Leave`.
-* **Anonymous Filing Indicator:** Supports anonymous grievance submissions to protect worker identity.
-* **Resolution Workflow:** Tracks ticket progress (`New`, `In Progress`, `Resolved`, `Closed`) with manager response logs.
-
----
-
-### 13. 📁 Documents Repository (`DocumentsView.tsx`)
-* **Central Regulatory Library:** Document storage for Mines Act PDFs, DGMS Circulars, MoEFCC Environmental Clearances, SPCB Consent to Operate certificates, and safety circulars.
-* **Filter & Search:** Category filters, version history, validity date tracking, and document download options.
-
----
-
-### 14. 🚨 Observations & Incidents Log (`IncidentsView.tsx`)
-* **Field Incident Register:** Log of field observations categorized into `unsafe_act`, `unsafe_condition`, `near_miss`, `incident`, and `sos`.
-* **Root Cause Analysis (RCA):** RCA reporting panel with investigation assignments, corrective actions, and emergency team dispatch controls.
-
----
-
-### 15. 📊 Compliance Reports (`ReportsView.tsx`)
-* **Automated DGMS Report Generator:** Generates monthly statutory compliance reports, zero-incident certificates, and DGMS audit submissions.
-* **Export Formats:** Supports PDF report export, Excel spreadsheets, and raw JSON data dumps.
-
----
-
-### 16. 🔔 Alerts & Emergency Center (`AlertsView.tsx`)
-* **Priority Alert Feed:** Real-time notification queue categorized by `Critical`, `High`, `Medium`, and `Information`.
-* **SOS Panic Signal Center:** Direct view of unacknowledged mobile SOS alerts sent by underground or opencast field workers.
-
----
-
-### 17. 👥 User Management & Roles (`UsersView.tsx`)
-* **Multi-Role User Directory:** Directory of personnel across all 9 roles (`cil_admin`, `subsidiary_admin`, `area_gm`, `mine_manager`, `safety_officer`, `supervisor`, `worker`, `regulator`, `contractor_admin`).
-* **Permissions & Scope Access:** Role-based permission viewer and org unit assignments.
-
----
-
-### 18. 🔐 Security Audit & Hash Chain (`AuditLogsView.tsx`)
-* **Cryptographic SHA-256 Audit Trail:** Immutable log of all system events (inspection submissions, CAPA approvals, profile edits, user logins).
-* **Chain Integrity Verification:** Cryptographic hash verification tool to detect any database record tampering.
-
----
-
-### 19. 🤖 Ask Netra (AI Copilot & Floating Assistant) (`AskNetraFloating.tsx`)
-* **Global Floating AI Assistant:** Accessible from every page via a floating action trigger.
-* **Bilingual Voice & Text AI:** Supports English and Hindi voice/text queries regarding Mines Act 1952 regulations, CMR 2017 circulars, mine health status, and statutory compliance guidance.
-
----
-
-### 20. 🌐 Internationalization & Dual Language (`i18n.ts`, `en.json`, `hi.json`)
-* **Bilingual UI Support:** Seamless switching between **English** and **Hindi (हिंदी)** for all navigation titles, metrics, table headers, and alert banners.
-
----
-
-## 🛠️ Technology Stack
-
-* **Frontend Framework:** React 19 / Vite / TanStack Router
-* **Styling:** Vanilla CSS (TailwindCSS utility integration, custom design tokens)
-* **Icons:** Lucide React
-* **State Management:** Zustand (`useAppStore`)
-* **Notifications:** Sonner Toast Engine
-* **Internationalization:** i18next (`en.json`, `hi.json`)
-
----
-
-## 🚀 Running the Frontend Locally
-
+### 1. Run Frontend
 ```bash
+# Navigate to frontend directory
 cd frontend
+
+# Install node dependencies
 npm install
+
+# Start development server
 npm run dev
 ```
-Open **`http://localhost:5173/`** or **`http://localhost:5173/dashboard`** in your browser.
+The frontend will launch at `http://localhost:5173`.
+
+### 2. Build for Production
+```bash
+cd frontend
+npm run build
+```
+
+---
+
+## 🚀 How to Initialize Git & Push to GitHub
+
+If you haven't pushed this repository to GitHub yet, follow these commands in your terminal:
+
+```bash
+# 1. Initialize git repository in root CoalGuard folder
+git init
+
+# 2. Add all files to staging
+git add .
+
+# 3. Create initial commit
+git commit -m "feat: initial commit of CoalGuard platform with complete frontend UI and documentation"
+
+# 4. Set main branch name
+git branch -M main
+
+# 5. Add your GitHub remote URL (replace URL with your repository link)
+git remote add origin https://github.com/YOUR_GITHUB_USERNAME/CoalGuard.git
+
+# 6. Push to GitHub
+git push -u origin main
+```
+
+---
+
+## 🔒 Security & Data Compliance Standards
+- **DGMS Standards Compliance**: Designed strictly following DGMS circular guidelines for safety management plans in open-pit and underground mines.
+- **Data Protection**: TLS 1.3 encryption for all telemetry and inspection document uploads.
