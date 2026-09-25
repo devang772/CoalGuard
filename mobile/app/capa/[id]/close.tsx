@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { MOCK_CAPAS } from '../../../src/api/mock/data';
 import { closeCapaApi } from '../../../src/api/endpoints';
+import { useSettingsStore } from '../../../src/store/settings';
 import { DistanceMeter } from '../../../src/components/DistanceMeter';
 import { BeforeAfterView } from '../../../src/components/BeforeAfterView';
 import { ResultChecklist, CheckResult } from '../../../src/components/ResultChecklist';
@@ -23,6 +24,15 @@ export default function CapaCloseScreen() {
   } | null>(null);
   const [loading, setLoading] = useState(false);
 
+  useFocusEffect(
+    useCallback(() => {
+      const { lastCapturedPhoto } = useSettingsStore.getState();
+      if (lastCapturedPhoto) {
+        setAfterPhotoUri(lastCapturedPhoto);
+      }
+    }, [])
+  );
+
   const toggleSimulatedDistance = () => {
     if (isSimulatedFar) {
       setDistanceMeters(12);
@@ -34,10 +44,7 @@ export default function CapaCloseScreen() {
   };
 
   const handleCaptureAfterPhoto = () => {
-    const mockAfter = 'https://images.unsplash.com/photo-1544725176-7c40e5a71c5e?w=600';
-    setAfterPhotoUri(mockAfter);
     setVerificationResult(null);
-
     router.push({
       pathname: '/camera' as any,
       params: { ghostUri: capa.before_photo.url },

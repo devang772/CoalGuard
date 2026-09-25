@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Image } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { BigButton } from '../../../src/components/BigButton';
+import { useSettingsStore } from '../../../src/store/settings';
+import { addFindingApi } from '../../../src/api/endpoints';
 import { colors } from '../../../src/theme/colors';
 
 const CATEGORIES = [
@@ -30,7 +32,16 @@ export default function AddFindingScreen() {
   const [description, setDescription] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
 
-  const handleSaveFinding = () => {
+  useFocusEffect(
+    useCallback(() => {
+      const { lastCapturedPhoto } = useSettingsStore.getState();
+      if (lastCapturedPhoto) {
+        setPhotoUri(lastCapturedPhoto);
+      }
+    }, [])
+  );
+
+  const handleSaveFinding = async () => {
     if (!description && !photoUri) {
       Alert.alert('Required Info', 'Please provide a finding description or photo proof.');
       return;
@@ -88,12 +99,16 @@ export default function AddFindingScreen() {
       <View style={styles.card}>
         <Text style={styles.label}>Proof Photo (In-App Camera)</Text>
         {photoUri ? (
-          <Image source={{ uri: photoUri }} style={{ width: '100%', height: 160, borderRadius: 12 }} />
+          <TouchableOpacity onPress={() => router.push('/camera' as any)}>
+            <Image source={{ uri: photoUri }} style={{ width: '100%', height: 180, borderRadius: 12 }} />
+            <Text style={{ color: colors.emerald, fontWeight: '700', marginTop: 6, textAlign: 'center' }}>
+              Retake Satya Proof Photo
+            </Text>
+          </TouchableOpacity>
         ) : (
           <TouchableOpacity
             style={styles.camBox}
             onPress={() => {
-              setPhotoUri('https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=600');
               router.push('/camera' as any);
             }}
           >

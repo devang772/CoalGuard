@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Switch, Image, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { BigButton } from '../../src/components/BigButton';
+import { useSettingsStore } from '../../src/store/settings';
 import { submitObservationApi } from '../../src/api/endpoints';
 import { colors } from '../../src/theme/colors';
 
@@ -21,6 +22,15 @@ export default function FormReportScreen() {
   const [anonymous, setAnonymous] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      const { lastCapturedPhoto } = useSettingsStore.getState();
+      if (lastCapturedPhoto) {
+        setPhotoUri(lastCapturedPhoto);
+      }
+    }, [])
+  );
 
   const handleSubmit = async () => {
     setSubmitting(true);
