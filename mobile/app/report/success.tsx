@@ -15,21 +15,24 @@ export default function ReportSuccessScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.iconCircle}>
-        <Feather name="check" size={54} color="#FFF" />
+      <View style={[styles.iconCircle, isQueued && { backgroundColor: colors.safetyAmber }]}>
+        <Feather name={isQueued ? "wifi-off" : "check"} size={54} color="#FFF" />
       </View>
 
-      <Text style={styles.title}>{isQueued ? 'Report Saved Locally ✓' : 'Report Submitted ✓'}</Text>
+      <Text style={styles.title}>
+        {isQueued ? '✓ Report Saved Offline' : '✓ Report Submitted'}
+      </Text>
+
       <Text style={styles.refCode}>Ref ID: {refId}</Text>
+
       <Text style={styles.subText}>
         {isQueued
-          ? 'Saved to offline outbox. Will sync automatically when network is connected.'
-          : 'Sent to the mine control room. Serious hazards automatically become a CAPA.'}
-        {trustScore != null ? ' Satya Proof trust verification attached.' : ''}
+          ? 'It will automatically sync when network is available.'
+          : 'Sent to the mine control room. Serious hazards automatically generate a CAPA action.'}
       </Text>
 
       {trustScore != null && (
-        <View style={{ marginVertical: 20 }}>
+        <View style={{ marginVertical: 16 }}>
           <TrustBadge score={trustScore} flags={trustFlags} />
         </View>
       )}
@@ -37,7 +40,7 @@ export default function ReportSuccessScreen() {
       <BigButton
         title="Return to Home Dashboard"
         onPress={() => router.replace('/(tabs)/home')}
-        style={{ width: '100%', marginTop: 20 }}
+        style={{ width: '100%', marginTop: 24 }}
       />
     </View>
   );
@@ -77,7 +80,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.textSecondary,
     textAlign: 'center',
-    marginTop: 10,
+    marginTop: 12,
     lineHeight: 22,
+    maxWidth: 320,
   },
 });

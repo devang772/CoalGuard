@@ -7,7 +7,7 @@ from app.models import Notification, OrgUnit, User
 from app.services.realtime import broadcaster
 
 SOS_CHAIN = {Role.MINE_MANAGER, Role.SAFETY_OFFICER, Role.AREA_GM, Role.SUBSIDIARY_ADMIN, Role.CIL_ADMIN}
-MANAGER_AND_GM = {Role.MINE_MANAGER, Role.AREA_GM}
+MANAGER_AND_GM = {Role.MINE_MANAGER, Role.SAFETY_OFFICER, Role.AREA_GM, Role.SUBSIDIARY_ADMIN, Role.CIL_ADMIN}
 
 
 def _ancestors(db: Session, mine_id: int) -> list[int]:

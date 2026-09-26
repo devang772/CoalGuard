@@ -66,7 +66,7 @@ function requireMineId(): number {
   return mineId;
 }
 
-function isForcedOffline(): boolean {
+export function isForcedOffline(): boolean {
   return useSettingsStore.getState().forceOffline || !useSyncStore.getState().isOnline;
 }
 
@@ -99,15 +99,17 @@ export interface EvidenceUpload {
   clientUuid?: string;
 }
 
-/** Uploads a photo taken in the app. Throws on failure (network errors are handled by the callers). */
+/** Uploads a photo or audio recording taken in the app. Throws on failure (network errors are handled by the callers). */
 export async function uploadEvidenceApi({ uri, mineId, meta, clientUuid }: EvidenceUpload): Promise<EvidenceInfo> {
   const formData = new FormData();
 
+  const isAudio = uri.includes('audio') || uri.endsWith('.webm') || uri.endsWith('.m4a') || uri.endsWith('.wav') || uri.endsWith('.aac') || uri.endsWith('.mp3');
+
   if (Platform.OS === 'web') {
     const blob = await (await fetch(uri)).blob();
-    formData.append('file', blob, 'photo.jpg');
+    formData.append('file', blob, isAudio ? 'voice.m4a' : 'photo.jpg');
   } else {
-    formData.append('file', { uri, name: 'photo.jpg', type: 'image/jpeg' } as any);
+    formData.append('file', { uri, name: isAudio ? 'voice.m4a' : 'photo.jpg', type: isAudio ? 'audio/m4a' : 'image/jpeg' } as any);
   }
 
   const device = await getAppDeviceInfo();
@@ -323,6 +325,9 @@ export async function closeCapaApi(
  * speech model yet, so the screen lets the user type the report instead.
  */
 export async function processVoiceAiApi(audioUri: string, language: string): Promise<VoiceReportResult | null> {
+  if (isForcedOffline()) {
+    return null;
+  }
   const formData = new FormData();
   if (Platform.OS === 'web') {
     const blob = await (await fetch(audioUri)).blob();
@@ -346,7 +351,7 @@ export async function processVoiceAiApi(audioUri: string, language: string): Pro
       },
     };
   } catch (err) {
-    if (err instanceof ApiError && (err.status === 404 || err.status === 405 || err.status === 501 || err.status === 503)) {
+    if (isNetworkError(err) || (err instanceof ApiError && (err.status === 404 || err.status === 405 || err.status === 501 || err.status === 503))) {
       return null;
     }
     throw err;
@@ -498,12 +503,14 @@ export async function submitObservationApi(data: {
   anonymous: boolean;
   photoUri?: string | null;
   photoMeta?: CaptureMeta | null;
+  audioUri?: string | null;
   source?: 'app' | 'voice';
   transcript?: string;
   language?: string;
 }): Promise<SubmitResult<{ id: number; capa_id: number | null }>> {
   const clientUuid = newClientUuid('observation');
   const mineId = requireMineId();
+  const photo = photoEvidence('evidence_id', data.photoUri, data.photoMeta, mineId);
   return submitOrQueue({
     kind: 'observation',
     clientUuid,
@@ -522,7 +529,7 @@ export async function submitObservationApi(data: {
       transcript: data.transcript || null,
       client_uuid: clientUuid,
     },
-    evidence: photoEvidence('evidence_id', data.photoUri, data.photoMeta, mineId),
+    evidence: photo,
     send: async (body) => {
       const res = await apiFetch<any>('/observations', { method: 'POST', body: JSON.stringify(body) });
       return { id: res.id, capa_id: res.capa_id ?? null };
