@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { useAuthStore } from '../../src/store/auth';
 import { BigButton } from '../../src/components/BigButton';
 import { colors } from '../../src/theme/colors';
@@ -10,7 +11,20 @@ export default function AppLockScreen() {
   const router = useRouter();
   const { setAppLocked } = useAuthStore();
 
-  const handleUnlock = () => {
+  const handleUnlock = async () => {
+    try {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const enrolled = hasHardware && (await LocalAuthentication.isEnrolledAsync());
+      if (enrolled) {
+        const res = await LocalAuthentication.authenticateAsync({ promptMessage: 'Unlock Netra Mobile' });
+        if (!res.success) {
+          Alert.alert('Locked', 'Authentication failed. Try again.');
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('[lock] Local authentication unavailable:', err);
+    }
     setAppLocked(false);
     router.replace('/(tabs)/home');
   };

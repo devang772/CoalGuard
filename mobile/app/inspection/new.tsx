@@ -1,33 +1,53 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { BigButton } from '../../src/components/BigButton';
-import { startInspectionApi } from '../../src/api/endpoints';
-import { MOCK_CHECKLISTS } from '../../src/api/mock/data';
+import { fetchChecklistsApi, startInspectionApi } from '../../src/api/endpoints';
+import { useApi } from '../../src/lib/useApi';
+import { getCurrentFix } from '../../src/lib/location';
+import { useActiveMine } from '../../src/store/master';
+import { useAuthStore } from '../../src/store/auth';
 import { colors } from '../../src/theme/colors';
 
 const TYPES = ['Internal Safety Audit', 'Statutory CMR Inspection', 'DGMS Officer Accompany', 'SPCB Environmental Check'];
+const TYPE_KEYS: Record<string, 'internal' | 'statutory' | 'dgms' | 'spcb'> = {
+  'Internal Safety Audit': 'internal',
+  'Statutory CMR Inspection': 'statutory',
+  'DGMS Officer Accompany': 'dgms',
+  'SPCB Environmental Check': 'spcb',
+};
 
 export default function StartInspectionScreen() {
   const router = useRouter();
+  const mine = useActiveMine();
+  const { user } = useAuthStore();
   const [selectedType, setSelectedType] = useState(TYPES[0]);
-  const [selectedChecklist, setSelectedChecklist] = useState(MOCK_CHECKLISTS[0].id);
+  const checklists = useApi(() => (mine ? fetchChecklistsApi(mine.id) : Promise.resolve([])), [mine?.id]);
+  const [pickedChecklist, setPickedChecklist] = useState<string | null>(null);
+  const selectedChecklist = pickedChecklist || checklists.data?.[0]?.id || '';
   const [starting, setStarting] = useState(false);
 
   const handleStart = async () => {
-    setStarting(true);
-    let inspId = 'insp-101';
-    try {
-      const typeKey = selectedType.includes('DGMS') ? 'dgms' : selectedType.includes('SPCB') ? 'spcb' : 'internal';
-      const chkNum = parseInt(selectedChecklist.replace('chk-', ''), 10) || 1;
-      const res = await startInspectionApi(1, typeKey, chkNum);
-      if (res?.id) inspId = String(res.id);
-    } catch (err: any) {
-      console.warn('[StartInspection] Start API failed, using fallback:', err.message);
+    if (!selectedChecklist) {
+      Alert.alert('Checklist Required', 'No inspection checklist is available for this mine.');
+      return;
     }
-    setStarting(false);
-    router.push(`/inspection/${inspId}?checklistId=${selectedChecklist}` as any);
+    setStarting(true);
+    try {
+      const fix = await getCurrentFix();
+      const res = await startInspectionApi({
+        type: TYPE_KEYS[selectedType] || 'internal',
+        checklistId: Number(selectedChecklist),
+        lat: fix?.lat ?? null,
+        lng: fix?.lng ?? null,
+      });
+      router.push(`/inspection/${res.id}?checklistId=${selectedChecklist}` as any);
+    } catch (err: any) {
+      Alert.alert('Could not start inspection', err.message);
+    } finally {
+      setStarting(false);
+    }
   };
 
   return (
@@ -40,7 +60,7 @@ export default function StartInspectionScreen() {
         <Text style={styles.label}>Mine Unit</Text>
         <View style={styles.infoRow}>
           <Feather name="shield" size={20} color={colors.safetyAmberDark} />
-          <Text style={styles.valueText}>Moonidih UG Mine (BCCL, Jharia)</Text>
+          <Text style={styles.valueText}>{mine?.name || user?.mine_name || 'Loading mine…'}</Text>
         </View>
       </View>
 
@@ -62,11 +82,11 @@ export default function StartInspectionScreen() {
       {/* Checklist Select */}
       <View style={styles.card}>
         <Text style={styles.label}>Select Master Checklist</Text>
-        {MOCK_CHECKLISTS.map((chk) => (
+        {(checklists.data || []).map((chk) => (
           <TouchableOpacity
             key={chk.id}
             style={[styles.radioRow, selectedChecklist === chk.id && styles.radioActive]}
-            onPress={() => setSelectedChecklist(chk.id)}
+            onPress={() => setPickedChecklist(chk.id)}
           >
             <View style={[styles.radioCircle, selectedChecklist === chk.id && styles.radioCircleActive]} />
             <View style={{ flex: 1 }}>
@@ -77,7 +97,7 @@ export default function StartInspectionScreen() {
         ))}
       </View>
 
-      <BigButton title="Start Inspection Checklist →" onPress={handleStart} style={{ marginTop: 10 }} />
+      <BigButton title="Start Inspection Checklist →" onPress={handleStart} loading={starting} style={{ marginTop: 10 }} />
     </ScrollView>
   );
 }

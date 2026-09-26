@@ -1,187 +1,195 @@
-import React, { useState } from "react";
-import {
-  MessageSquare,
-  Lock,
-  Search,
-  CheckCircle2,
-  Clock,
-  Send,
-  Sparkles,
-  ShieldCheck,
-  AlertCircle,
-} from "lucide-react";
+﻿import { useCallback, useEffect, useState } from "react";
+import { RefreshCw, MessageSquare, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { getGrievancesApi, submitGrievanceApi, updateGrievanceApi, type Page, type Row } from "@/lib/api";
+import { useAppStore } from "@/store/useAppStore";
 
-interface Grievance {
-  id: string;
-  token: string;
-  mineName: string;
-  category: "Wages" | "Safety" | "Harassment" | "Facilities" | "Other";
-  text: string;
-  anonymous: boolean;
-  reporterName?: string;
-  status: "New" | "In Progress" | "Resolved" | "Closed";
-  createdAt: string;
-  sentiment: "Critical Concern" | "Moderate Concern" | "Informational";
-}
+const fmt = (v: unknown) => v === null || v === undefined || v === "" ? "—" : String(v);
+const ist = (v: unknown) => { try { return new Date(String(v)).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }); } catch { return fmt(v); } };
+const statusColor: Record<string, string> = { new: "text-blue-700 bg-blue-50 border-blue-200", in_progress: "text-amber-700 bg-amber-50 border-amber-200", resolved: "text-emerald-700 bg-emerald-50 border-emerald-200", closed: "text-slate-600 bg-slate-50 border-slate-200" };
+const CATEGORIES = ["wages", "safety", "harassment", "facilities", "leave", "other"];
 
-const mockGrievances: Grievance[] = [
-  {
-    id: "GRV-01",
-    token: "GRV-7F3K",
-    mineName: "Kusunda Opencast Mine",
-    category: "Safety",
-    text: "Shift B miners at Pit 4 are asked to work near highwall slope bench without personal dust masks or safety helmets provided.",
-    anonymous: true,
-    status: "New",
-    createdAt: "Yesterday, 04:15 PM",
-    sentiment: "Critical Concern",
-  },
-  {
-    id: "GRV-02",
-    token: "GRV-9M2P",
-    mineName: "Moonidih Shaft & Washery",
-    category: "Wages",
-    text: "Contractor M/s Eastern Infra has delayed wages disbursement for August 2026 beyond statutory 7th day limit.",
-    anonymous: false,
-    reporterName: "Rajesh Tudu",
-    status: "In Progress",
-    createdAt: "22 Sep 2026",
-    sentiment: "Critical Concern",
-  },
-  {
-    id: "GRV-03",
-    token: "GRV-4W8N",
-    mineName: "Jharia Underground Coal Mine",
-    category: "Facilities",
-    text: "Underground drinking water filter on Seam 9 face has been out of service for 4 days.",
-    anonymous: true,
-    status: "Resolved",
-    createdAt: "18 Sep 2026",
-    sentiment: "Moderate Concern",
-  },
-];
+function SubmitDialog({ close, reload }: { close: () => void; reload: () => Promise<void> }) {
+  const [category, setCategory] = useState("safety");
+  const [text, setText] = useState("");
+  const [anonymous, setAnonymous] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<Row | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-export const GrievancesView: React.FC = () => {
-  const [selectedGrievance, setSelectedGrievance] = useState<Grievance | null>(mockGrievances[0]);
-  const [responseMsg, setResponseMsg] = useState("");
-
-  const handleResolve = () => {
-    if (!selectedGrievance) return;
-    toast.success(`Grievance ${selectedGrievance.token} Marked Resolved`, {
-      description: "Response dispatched and logged into immutable audit register.",
-    });
-    setResponseMsg("");
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!text.trim()) { setError("Please describe your grievance."); return; }
+    setSubmitting(true); setError(null);
+    try {
+      const r = await submitGrievanceApi({ category, text, anonymous });
+      setResult(r);
+      await reload();
+    } catch (err) { setError(err instanceof Error ? err.message : "Submission failed"); }
+    finally { setSubmitting(false); }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h2 className="font-display text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-          Anonymous Labour Grievance Portal
-          <MessageSquare size={22} className="text-amber-500" />
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Whistleblower protected grievance submission, wage dispute resolution, and statutory labor compliance redressal.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Grievances List */}
-        <div className="lg:col-span-6 space-y-3">
-          {mockGrievances.map((grv) => (
-            <div
-              key={grv.id}
-              onClick={() => setSelectedGrievance(grv)}
-              className={`p-4 rounded-xl border cursor-pointer transition-all ${
-                selectedGrievance?.id === grv.id
-                  ? "bg-card border-amber-500 shadow-md ring-1 ring-amber-500/30"
-                  : "bg-card/80 border-border hover:border-slate-300 dark:hover:border-slate-700"
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-500/40">
-                    Token: {grv.token}
-                  </span>
-                  {grv.anonymous && (
-                    <span className="inline-flex items-center gap-1 text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full border font-mono">
-                      <Lock size={10} /> Anonymous Protected 🔒
-                    </span>
-                  )}
-                </div>
-                <span
-                  className={`text-[11px] font-mono px-2 py-0.5 rounded-full ${
-                    grv.status === "New"
-                      ? "bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/40"
-                      : grv.status === "In Progress"
-                      ? "bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/40"
-                      : "bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/40"
-                  }`}
-                >
-                  {grv.status}
-                </span>
-              </div>
-
-              <p className="text-xs text-foreground mt-2 line-clamp-2 leading-relaxed">{grv.text}</p>
-
-              <div className="mt-3 pt-3 border-t flex items-center justify-between text-[11px] text-muted-foreground">
-                <span>Category: <strong className="text-foreground">{grv.category}</strong></span>
-                <span>Mine: <strong className="text-foreground">{grv.mineName}</strong></span>
-              </div>
-            </div>
-          ))}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <section role="dialog" aria-modal="true" className="dashboard-card w-full max-w-lg bg-card p-6 shadow-2xl">
+        <div className="flex items-center justify-between border-b pb-3 mb-4">
+          <h3 className="font-display text-lg font-bold">Submit Grievance</h3>
+          <Button variant="ghost" size="icon" onClick={close}><X className="size-4" /></Button>
         </div>
-
-        {/* Grievance Detail & Resolution Panel */}
-        {selectedGrievance && (
-          <div className="lg:col-span-6 bg-card border rounded-xl p-5 flex flex-col justify-between shadow-sm">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b pb-3">
-                <div>
-                  <h3 className="font-display text-base font-bold text-foreground flex items-center gap-2">
-                    Token #{selectedGrievance.token}
-                  </h3>
-                  <p className="text-xs text-muted-foreground">{selectedGrievance.mineName} · Received {selectedGrievance.createdAt}</p>
-                </div>
-                {selectedGrievance.anonymous ? (
-                  <span className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-500/40 font-mono flex items-center gap-1">
-                    <Lock size={12} /> Reporter Confidential
-                  </span>
-                ) : (
-                  <span className="text-xs text-foreground">Reporter: {selectedGrievance.reporterName}</span>
-                )}
-              </div>
-
-              <div>
-                <h4 className="text-xs font-mono text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1 font-bold">Grievance Narrative</h4>
-                <div className="p-4 rounded-xl bg-muted/30 border text-xs text-foreground leading-relaxed">
-                  "{selectedGrievance.text}"
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-foreground">Official Manager Response & Action Plan:</label>
-                <textarea
-                  rows={3}
-                  value={responseMsg}
-                  onChange={(e) => setResponseMsg(e.target.value)}
-                  placeholder="Type official redressal response to be sent to worker..."
-                  className="w-full bg-background border rounded-lg p-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-amber-500"
-                />
-              </div>
+        {result ? (
+          <div className="text-center py-4 space-y-3">
+            <p className="text-emerald-700 font-semibold">Grievance submitted!</p>
+            <div className="rounded-xl border-2 border-emerald-400 p-4 bg-emerald-50">
+              <p className="text-xs text-muted-foreground mb-1">Your tracking token — save it to check status</p>
+              <p className="font-mono text-2xl font-bold text-emerald-700">{fmt(result.token)}</p>
             </div>
-
-            <div className="pt-4 border-t flex items-center justify-end gap-2 mt-4">
-              <Button size="sm" onClick={handleResolve} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1.5 shadow-sm">
-                <CheckCircle2 size={14} /> Dispatch & Mark Resolved
-              </Button>
-            </div>
+            <p className="text-xs text-muted-foreground">{fmt(result.message)}</p>
+            <Button onClick={close}>Done</Button>
           </div>
+        ) : (
+          <form onSubmit={e => void submit(e)} className="space-y-4">
+            <label className="block text-sm font-medium">Category
+              <select value={category} onChange={e => setCategory(e.target.value)} className="mt-1 block w-full rounded-md border bg-background p-2 text-sm capitalize">
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+            <label className="block text-sm font-medium">Description
+              <textarea required value={text} onChange={e => setText(e.target.value)} rows={4} className="mt-1 block w-full rounded-md border bg-background p-2 text-sm" placeholder="Describe the issue…" />
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={anonymous} onChange={e => setAnonymous(e.target.checked)} className="rounded" />
+              Submit anonymously (name will not be stored)
+            </label>
+            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={close}>Cancel</Button>
+              <Button disabled={submitting}>{submitting ? "Submitting…" : "Submit grievance"}</Button>
+            </div>
+          </form>
         )}
-      </div>
+      </section>
     </div>
   );
-};
+}
+
+function RespondDialog({ grievance, close, reload }: { grievance: Row; close: () => void; reload: () => Promise<void> }) {
+  const [status, setStatus] = useState(fmt(grievance.status));
+  const [response, setResponse] = useState(fmt(grievance.response));
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true); setError(null);
+    try {
+      await updateGrievanceApi(Number(grievance.id), { status, response });
+      await reload(); close();
+    } catch (err) { setError(err instanceof Error ? err.message : "Update failed"); }
+    finally { setSubmitting(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <section role="dialog" aria-modal="true" className="dashboard-card w-full max-w-lg bg-card p-6 shadow-2xl">
+        <div className="flex items-center justify-between border-b pb-3 mb-4">
+          <h3 className="font-display text-lg font-bold">Respond to Grievance #{fmt(grievance.id)}</h3>
+          <Button variant="ghost" size="icon" onClick={close}><X className="size-4" /></Button>
+        </div>
+        <form onSubmit={e => void submit(e)} className="space-y-4">
+          <div className="rounded-lg border p-3 text-sm bg-muted/30"><p className="font-semibold mb-1">{fmt(grievance.category)}</p><p className="text-muted-foreground">{fmt(grievance.text)}</p></div>
+          <label className="block text-sm font-medium">Status
+            <select value={status} onChange={e => setStatus(e.target.value)} className="mt-1 block w-full rounded-md border bg-background p-2 text-sm">
+              <option value="new">New</option>
+              <option value="in_progress">In Progress</option>
+              <option value="resolved">Resolved</option>
+              <option value="closed">Closed</option>
+            </select>
+          </label>
+          <label className="block text-sm font-medium">Response
+            <textarea value={response === "—" ? "" : response} onChange={e => setResponse(e.target.value)} rows={3} className="mt-1 block w-full rounded-md border bg-background p-2 text-sm" placeholder="Your response…" />
+          </label>
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={close}>Cancel</Button>
+            <Button disabled={submitting}>{submitting ? "Saving…" : "Save response"}</Button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+export function GrievancesView() {
+  const { user } = useAppStore();
+  const [page, setPage] = useState<Page<Row> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [responding, setResponding] = useState<Row | null>(null);
+  const [statusFilter, setStatusFilter] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try { setPage(await getGrievancesApi(statusFilter ? { status: statusFilter } : {})); }
+    catch (e) { setError(e instanceof Error ? e.message : "Failed to load grievances"); }
+    finally { setLoading(false); }
+  }, [statusFilter]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const canRespond = user && ["mine_manager", "area_gm", "subsidiary_admin", "cil_admin"].includes(user.role);
+  const items = page?.items ?? [];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div>
+          <h2 className="font-display text-2xl font-bold tracking-tight flex items-center gap-2"><MessageSquare className="size-6 text-primary" /> Grievances</h2>
+          <p className="text-sm text-muted-foreground">Anonymous worker grievances tracked through backend-issued tokens.</p>
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={() => setSubmitting(true)} className="gap-1"><Plus className="size-4" /> Submit grievance</Button>
+          <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-1"><RefreshCw className="size-4" /> Refresh</Button>
+        </div>
+      </div>
+
+      <div className="flex gap-3 items-center flex-wrap">
+        <span className="text-sm text-muted-foreground">Filter:</span>
+        {["", "new", "in_progress", "resolved", "closed"].map(s => (
+          <button key={s} onClick={() => setStatusFilter(s)} className={`rounded-full text-xs px-3 py-1 border transition-colors ${statusFilter === s ? "bg-primary text-primary-foreground border-primary" : "border-muted bg-muted/30 hover:bg-muted"}`}>{s || "All"}</button>
+        ))}
+      </div>
+
+      {error && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive flex justify-between"><span>{error}</span><Button variant="outline" size="sm" onClick={load}>Retry</Button></div>}
+
+      <div className="space-y-3">
+        {loading && <p className="text-muted-foreground text-sm">Loading grievances…</p>}
+        {!loading && items.length === 0 && <p className="rounded-xl border p-8 text-center text-muted-foreground">No grievances in this scope.</p>}
+        {items.map(g => (
+          <article key={fmt(g.id)} className="dashboard-card p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span className={`text-[10px] font-bold border px-1.5 py-0.5 rounded uppercase ${statusColor[fmt(g.status)] ?? ""}`}>{fmt(g.status)}</span>
+                  <span className="text-xs font-semibold capitalize">{fmt(g.category)}</span>
+                  {g.anonymous && <span className="text-[10px] bg-slate-100 border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded">Anonymous</span>}
+                  <span className="text-[10px] text-muted-foreground font-mono">{fmt(g.token)}</span>
+                </div>
+                <p className="text-sm leading-relaxed">{fmt(g.text)}</p>
+                {g.response && <div className="mt-2 rounded-lg bg-muted/30 border p-2 text-xs"><span className="text-muted-foreground">Response:</span> {fmt(g.response)}</div>}
+                <p className="text-xs text-muted-foreground mt-1">{ist(g.created_at)} · {fmt(g.mine_name)}</p>
+              </div>
+              {canRespond && (
+                <Button size="sm" variant="outline" onClick={() => setResponding(g)}>Respond</Button>
+              )}
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {page && <div className="text-sm text-muted-foreground">Total: <strong>{page.total}</strong></div>}
+      {submitting && <SubmitDialog close={() => setSubmitting(false)} reload={load} />}
+      {responding && <RespondDialog grievance={responding} close={() => setResponding(null)} reload={load} />}
+    </div>
+  );
+}

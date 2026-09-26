@@ -7,3 +7,4 @@ uploads/
 app/ai/models/*.joblib
 *.db
 *.sqlite3
+app/ai/models/whisper/

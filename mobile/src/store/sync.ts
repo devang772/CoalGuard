@@ -18,7 +18,7 @@ export const useSyncStore = create<SyncState>((set) => ({
   isSyncing: false,
   pendingCount: 0,
   failedCount: 0,
-  lastSyncTime: new Date().toISOString(),
+  lastSyncTime: null,
 
   setOnlineStatus: (isOnline) => set({ isOnline }),
   setSyncing: (isSyncing) => set({ isSyncing }),

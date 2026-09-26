@@ -53,18 +53,3 @@ export function isPointInPolygon(
 
   return inside;
 }
-
-/**
- * Mock mine polygon centered around Moonidih UG, BCCL, Jharia Area (23.75 N, 86.42 E)
- */
-export const MOONIDIH_MINE_POLYGON: LocationPoint[] = [
-  { latitude: 23.7580, longitude: 86.4120 },
-  { latitude: 23.7595, longitude: 86.4280 },
-  { latitude: 23.7440, longitude: 86.4310 },
-  { latitude: 23.7410, longitude: 86.4150 },
-];
-
-export const MOONIDIH_CENTER: LocationPoint = {
-  latitude: 23.7500,
-  longitude: 86.4200,
-};

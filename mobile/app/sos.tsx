@@ -3,20 +3,38 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking } from 'react-
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSettingsStore } from '../src/store/settings';
-import { sendSosApi } from '../src/api/endpoints';
+import { useAuthStore } from '../src/store/auth';
+import { sendSosApi, SosKind } from '../src/api/endpoints';
+import { getCurrentFix, GeoFix } from '../src/lib/location';
 import { BigButton } from '../src/components/BigButton';
 import { colors } from '../src/theme/colors';
 
 const SOS_TYPES = ['Fire Hazard', 'Roof Fall', 'Gas Leak', 'Worker Injury', 'Inundation', 'Machinery Crash'];
+const SOS_KINDS: Record<string, SosKind> = {
+  'Fire Hazard': 'fire',
+  'Roof Fall': 'roof_fall',
+  'Gas Leak': 'gas',
+  'Worker Injury': 'injury',
+  Inundation: 'flooding',
+  'Machinery Crash': 'other',
+};
 
 export default function SOSScreen() {
   const router = useRouter();
   const { sosSmsNumber } = useSettingsStore();
+  const { user } = useAuthStore();
 
-  const [isPressing, setIsPressing] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [sosSent, setSosSent] = useState(false);
   const [selectedType, setSelectedType] = useState('Roof Fall');
+  const [position, setPosition] = useState<GeoFix | null>(null);
+  const [delivery, setDelivery] = useState<{ queued: boolean; notified: number } | null>(null);
+
+  useEffect(() => {
+    getCurrentFix().then(setPosition);
+  }, []);
+
+  const coordsText = position ? `${position.lat.toFixed(4)} N, ${position.lng.toFixed(4)} E` : 'GPS unavailable';
 
   useEffect(() => {
     let timer: any;
@@ -38,12 +56,25 @@ export default function SOSScreen() {
   };
 
   const dispatchSos = async () => {
-    await sendSosApi(23.7505, 86.4205, selectedType);
-    setSosSent(true);
+    const fix = (await getCurrentFix()) || position;
+    if (fix) setPosition(fix);
+    try {
+      const res = await sendSosApi({
+        kind: SOS_KINDS[selectedType] || 'other',
+        note: selectedType,
+        lat: fix?.lat ?? null,
+        lng: fix?.lng ?? null,
+        accuracy: fix?.accuracy ?? null,
+      });
+      setDelivery({ queued: res.queued, notified: res.data?.notified ?? 0 });
+      setSosSent(true);
+    } catch (e: any) {
+      Alert.alert('SOS Failed', `${e.message}\nUse the emergency SMS button.`);
+    }
   };
 
   const sendSmsFallback = () => {
-    const msg = `🆘 SOS EMERGENCY! Type: ${selectedType}. Mine: Moonidih UG (23.7505 N, 86.4205 E). Time: ${new Date().toLocaleTimeString()}`;
+    const msg = `🆘 SOS EMERGENCY! Type: ${selectedType}. Mine: ${user?.mine_name || 'Mine'} (${coordsText}). Reported by: ${user?.name || ''}. Time: ${new Date().toLocaleTimeString()}`;
     Linking.openURL(`sms:${sosSmsNumber}?body=${encodeURIComponent(msg)}`);
   };
 
@@ -106,12 +137,16 @@ export default function SOSScreen() {
           </View>
           <Text style={styles.sentTitle}>🆘 EMERGENCY ALERT DISPATCHED</Text>
           <Text style={styles.sentDesc}>
-            Alert sent to Mine Manager, Safety Officer & Control Room with your exact coordinates (23.7505 N, 86.4205 E).
+            Alert sent to Mine Manager, Safety Officer & Control Room with your exact coordinates ({coordsText}).
           </Text>
 
           <View style={styles.priorityBox}>
-            <Feather name="wifi-off" size={16} color={colors.safetyAmber} />
-            <Text style={styles.priorityText}>SOS Queued as Priority #0 (Retrying every 10s)</Text>
+            <Feather name={delivery?.queued ? 'wifi-off' : 'wifi'} size={16} color={colors.safetyAmber} />
+            <Text style={styles.priorityText}>
+              {delivery?.queued
+                ? 'No network: SOS queued as Priority #0 (retries automatically)'
+                : `Delivered to server · ${delivery?.notified ?? 0} responders notified`}
+            </Text>
           </View>
 
           <BigButton

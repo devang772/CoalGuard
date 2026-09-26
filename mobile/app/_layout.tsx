@@ -1,12 +1,64 @@
 import React, { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import '../src/lib/i18n';
-import { initSyncEngine } from '../src/offline/syncEngine';
+import '../src/lib/webAlert';
+import { initSyncEngine, processOutboxSync } from '../src/offline/syncEngine';
+import { useAuthStore } from '../src/store/auth';
+import { useMasterStore } from '../src/store/master';
+import { fetchMeApi } from '../src/api/endpoints';
 import { colors } from '../src/theme/colors';
+
+// Screens reachable without logging in (the rest of the app needs a valid session).
+const PUBLIC_AUTH_SCREENS = ['language', 'permissions', 'login', 'onboarding', 'forgot-password'];
+
+function useAuthGuard() {
+  const router = useRouter();
+  const segments = useSegments() as string[];
+  const hasHydrated = useAuthStore((s) => s.hasHydrated);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const token = useAuthStore((s) => s.token);
+  const hasOnboardedPermissions = useAuthStore((s) => s.hasOnboardedPermissions);
+
+  const top = segments[0];
+  const isPublic = top === undefined || (top === '(auth)' && PUBLIC_AUTH_SCREENS.includes(segments[1]));
+  const allowed = isAuthenticated || isPublic;
+
+  // Send anyone without a session back to login.
+  useEffect(() => {
+    if (!hasHydrated || allowed) return;
+    router.replace((hasOnboardedPermissions ? '/(auth)/login' : '/(auth)/language') as any);
+  }, [hasHydrated, allowed, hasOnboardedPermissions]);
+
+  // A logged-in user who lands on the login screen goes straight to the app.
+  useEffect(() => {
+    if (hasHydrated && isAuthenticated && top === '(auth)' && segments[1] === 'login') {
+      router.replace('/(tabs)/home' as any);
+    }
+  }, [hasHydrated, isAuthenticated, top, segments[1]]);
+
+  // After login / app start: check the saved session with the server and download the offline master pack.
+  useEffect(() => {
+    if (!hasHydrated) return;
+    if (!isAuthenticated || !token) {
+      useMasterStore.getState().reset();
+      return;
+    }
+    fetchMeApi()
+      .then((me) => useAuthStore.getState().setUser(me))
+      .catch(() => {
+        // 401 already logs out inside apiFetch; offline keeps the saved session.
+      });
+    useMasterStore.getState().load();
+    processOutboxSync();
+  }, [hasHydrated, isAuthenticated, token]);
+
+  return hasHydrated && allowed;
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,6 +71,8 @@ const queryClient = new QueryClient({
 });
 
 export default function RootLayout() {
+  const canShow = useAuthGuard();
+
   useEffect(() => {
     initSyncEngine();
   }, []);
@@ -69,7 +123,22 @@ export default function RootLayout() {
           <Stack.Screen name="settings" options={{ title: 'App Settings' }} />
           <Stack.Screen name="help" options={{ title: 'Help & Tutorial' }} />
         </Stack>
+        {!canShow && (
+          <View style={guardStyles.blocker}>
+            <ActivityIndicator size="large" color={colors.safetyAmber} />
+          </View>
+        )}
       </SafeAreaProvider>
     </QueryClientProvider>
   );
 }
+
+const guardStyles = StyleSheet.create({
+  blocker: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#05080A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+});

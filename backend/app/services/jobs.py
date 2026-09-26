@@ -4,6 +4,7 @@ Each job takes the database session and "now" (so tests can use a fake clock), c
 the ORM (so every change lands in the audit chain), sends notifications, and returns what it did.
 Every reminder / escalation step is sent only once.
 """
+import logging
 import math
 from collections import defaultdict
 from datetime import date, datetime, timedelta
@@ -18,6 +19,8 @@ from app.services.clock import effective_now
 from app.services.fraud import contractor_alerts, contractor_score
 from app.services.notify import notify, people_for_mine
 from app.services.tasks import generate_tasks, mark_overdue
+
+log = logging.getLogger(__name__)
 from app.utils import IST_OFFSET, today_ist, utcnow
 
 DEFAULT_LADDER = [Role.MINE_MANAGER, Role.AREA_GM, Role.SUBSIDIARY_ADMIN, Role.CIL_ADMIN]
@@ -61,11 +64,28 @@ def refresh_contractor_scores(db: Session) -> int:
 
 
 def nightly(db: Session, today: date | None = None) -> dict:
-    """Create this period's tasks, mark late ones overdue, refresh contractor scores."""
+    """Create this period's tasks, mark late ones overdue, refresh contractor scores, re-train the risk model."""
     created = generate_tasks(db, today=today)
     overdue = mark_overdue(db, today=today)
     return {"tasks_created": created, "tasks_marked_overdue": overdue,
-            "contractor_scores_updated": refresh_contractor_scores(db)}
+            "contractor_scores_updated": refresh_contractor_scores(db),
+            "risk_model": _retrain_risk_model(db)}
+
+
+def _retrain_risk_model(db: Session) -> str:
+    """Re-train the ML risk model on today's database (skipped quietly while there is too little history)."""
+    try:
+        from app.ai.risk_model import ModelUnavailable, load_model
+    except ImportError:
+        return "not installed"
+    try:
+        info = load_model(db, force_retrain=True)
+        return f"trained on {info['training_rows']} mine-days"
+    except ModelUnavailable as exc:
+        return str(exc)
+    except Exception as exc:  # noqa: BLE001 - never stop the nightly job because of the model
+        log.exception("Risk model re-training failed")
+        return f"failed: {exc}"
 
 
 # ---------------------------------------------------------------- reminders

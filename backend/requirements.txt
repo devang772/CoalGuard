@@ -16,6 +16,16 @@ cloudinary>=1.40      # optional file storage (STORAGE_BACKEND=cloudinary)
 fpdf2>=2.7            # PDF reports
 openpyxl>=3.1         # Excel reports
 
+# AI / ML analytics and regulatory ingestion
+numpy>=2.0
+pandas>=2.2
+scikit-learn>=1.5
+xgboost>=2.1
+joblib>=1.4
+python-dotenv>=1.0
+pdfplumber>=0.11
+faster-whisper>=1.0   # offline speech-to-text for voice reports (model: app/ai/models/whisper)
+
 # testing
 pytest>=8.2
 httpx>=0.27

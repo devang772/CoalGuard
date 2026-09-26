@@ -1,254 +1,135 @@
-import { useState } from "react";
-import {
-  ShieldCheck,
-  FileCheck,
-  AlertCircle,
-  Clock,
-  Download,
-  Upload,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  Search,
-  ExternalLink,
-} from "lucide-react";
+﻿import { useCallback, useEffect, useState } from "react";
+import { CheckCircle, Clock, AlertTriangle, RefreshCw, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { getTasksApi, getTaskSummaryApi, completeTaskApi, getMinesApi, type Page, type Row } from "@/lib/api";
+import { useAppStore } from "@/store/useAppStore";
 
-const complianceRules = [
-  {
-    id: "REG-DGMS-01",
-    name: "DGMS Annual Mine Safety Plan (Form IV)",
-    mine: "Jharia Underground Coal Mine",
-    authority: "DGMS (Directorate General of Mines Safety)",
-    dueDate: "15 Oct 2026",
-    status: "Compliant",
-    score: "100%",
-    tone: "low",
-    certificate: "DGMS-FORM4-2026-991",
-  },
-  {
-    id: "REG-MOEF-02",
-    name: "Environmental Impact & Clearance (MoEFCC)",
-    mine: "Kusunda Opencast Mine",
-    authority: "MoEFCC / Central Pollution Control Board",
-    dueDate: "28 Sep 2026",
-    status: "Expiring Soon",
-    score: "74%",
-    tone: "high",
-    certificate: "EC-KUS-2021-REV-04",
-  },
-  {
-    id: "REG-PESO-03",
-    name: "Explosives Storage & Blasting License (PESO)",
-    mine: "Moonidih Shaft & Washery",
-    authority: "PESO (Petroleum and Explosives Safety)",
-    dueDate: "30 Nov 2026",
-    status: "Compliant",
-    score: "98%",
-    tone: "low",
-    certificate: "PESO-EXP-77102-MN",
-  },
-  {
-    id: "REG-DGMS-04",
-    name: "Monsoon Inundation Safety Audit (Circular #7)",
-    mine: "Karkali Open Pit",
-    authority: "DGMS Eastern Zone",
-    dueDate: "10 Sep 2026",
-    status: "Non-Compliant",
-    score: "42%",
-    tone: "critical",
-    certificate: "OVERDUE-SUBMISSION",
-  },
-  {
-    id: "REG-DGMS-05",
-    name: "Underground Methane Sensor Protocol",
-    mine: "Jharia Underground Coal Mine",
-    authority: "DGMS Tech Directorate",
-    dueDate: "01 Dec 2026",
-    status: "Compliant",
-    score: "94%",
-    tone: "low",
-    certificate: "CH4-PROT-2026-JH",
-  },
-  {
-    id: "REG-CPCB-06",
-    name: "Water Discharge & Effluent Permit (NOC)",
-    mine: "Singrauli North Open Pit",
-    authority: "State Pollution Control Board",
-    dueDate: "05 Oct 2026",
-    status: "Under Review",
-    score: "85%",
-    tone: "medium",
-    certificate: "NOC-WATER-SG-2026",
-  },
-];
+const fmt = (v: unknown) => v === null || v === undefined || v === "" ? "—" : String(v);
+const statusColor: Record<string, string> = { done: "text-emerald-600 bg-emerald-50 border-emerald-200", overdue: "text-red-600 bg-red-50 border-red-200", pending: "text-amber-600 bg-amber-50 border-amber-200" };
+const severityColor: Record<string, string> = { critical: "text-red-700", high: "text-orange-600", medium: "text-amber-600", low: "text-blue-600" };
 
-const categoryProgress = [
-  { name: "Safety & Hazard Management", percentage: 91, tone: "safe" },
-  { name: "Environmental & Air Quality", percentage: 76, tone: "warning" },
-  { name: "Heavy Machinery & Equipment", percentage: 88, tone: "safe" },
-  { name: "Labour Welfare & Medical Certs", percentage: 94, tone: "safe" },
-  { name: "Statutory Licenses & Permits", percentage: 68, tone: "critical text-rose-500" },
-];
+function TaskSummaryCard({ label, value, icon }: { label: string; value: unknown; icon: React.ReactNode }) {
+  return (
+    <div className="dashboard-card p-4">
+      <div className="flex items-center justify-between text-muted-foreground mb-2"><span className="text-xs font-semibold uppercase tracking-wider">{label}</span>{icon}</div>
+      <p className="font-display text-3xl font-bold">{fmt(value)}</p>
+    </div>
+  );
+}
 
 export function ComplianceView() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const { user } = useAppStore();
+  const [page, setPage] = useState<Page<Row> | null>(null);
+  const [summary, setSummary] = useState<Row | null>(null);
+  const [mines, setMines] = useState<Row[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [completing, setCompleting] = useState<number | null>(null);
+  const [completeMsg, setCompleteMsg] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [mineFilter, setMineFilter] = useState(user?.mineId ? String(user.mineId) : "");
 
-  const filteredRules = complianceRules.filter((rule) => {
-    const matchesSearch =
-      rule.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      rule.mine.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      rule.authority.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "All" || rule.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const params: Record<string, string | number | undefined> = {};
+      if (statusFilter) params.status = statusFilter;
+      if (mineFilter) params.mine_id = mineFilter;
+      const [tasks, sum, mineList] = await Promise.all([
+        getTasksApi(params),
+        getTaskSummaryApi(undefined, mineFilter ? Number(mineFilter) : undefined),
+        getMinesApi(),
+      ]);
+      setPage(tasks); setSummary(sum); setMines(mineList);
+    } catch (e) { setError(e instanceof Error ? e.message : "Failed to load compliance tasks"); }
+    finally { setLoading(false); }
+  }, [statusFilter, mineFilter, user]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const canComplete = (role: string) => ["supervisor", "safety_officer", "mine_manager"].includes(role);
+
+  const complete = async (taskId: number) => {
+    setCompleting(taskId); setCompleteMsg(null); setError(null);
+    try {
+      await completeTaskApi(taskId, { remarks: "Completed via dashboard" });
+      setCompleteMsg(`Task #${taskId} marked complete.`);
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "Task completion failed"); }
+    finally { setCompleting(null); }
+  };
+
+  const items = page?.items ?? [];
 
   return (
     <div className="space-y-6">
-      {/* Top Header */}
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
-          <h2 className="font-display text-2xl font-bold tracking-tight">Statutory & DGMS Compliance</h2>
-          <p className="text-sm text-muted-foreground">
-            Track regulatory compliance, mandatory filings, environmental clearances, and DGMS circular adherence.
-          </p>
+          <h2 className="font-display text-2xl font-bold tracking-tight">Compliance Tasks</h2>
+          <p className="text-sm text-muted-foreground">Statutory obligations and their task status. Backend-computed.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-2">
-            <Upload className="size-4" /> Upload Clearance Certificate
-          </Button>
-          <Button size="sm" className="gap-2">
-            <Download className="size-4" /> Export DGMS Audit Sheet
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-1"><RefreshCw className="size-4" /> Refresh</Button>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="dashboard-card p-4">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold uppercase tracking-wider">Overall Compliance</span>
-            <ShieldCheck className="size-4 text-emerald-500" />
-          </div>
-          <p className="mt-2 font-display text-3xl font-bold text-emerald-600">82.4%</p>
-          <p className="mt-1 text-xs text-emerald-600 font-medium">↑ 4.2% from last quarter</p>
+      {summary && (
+        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <TaskSummaryCard label="Overdue" value={summary.overdue} icon={<AlertTriangle className="size-4 text-red-500" />} />
+          <TaskSummaryCard label="Due today" value={summary.due_today} icon={<Clock className="size-4 text-amber-500" />} />
+          <TaskSummaryCard label="Due this week" value={summary.due_this_week} icon={<Clock className="size-4 text-blue-500" />} />
+          <TaskSummaryCard label="Done today" value={summary.done_today} icon={<CheckCircle className="size-4 text-emerald-500" />} />
+          <TaskSummaryCard label="Pending" value={summary.pending} icon={<Clock className="size-4 text-muted-foreground" />} />
         </div>
-        <div className="dashboard-card p-4">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold uppercase tracking-wider">Compliant Items</span>
-            <CheckCircle2 className="size-4 text-emerald-500" />
-          </div>
-          <p className="mt-2 font-display text-3xl font-bold">346</p>
-          <p className="mt-1 text-xs text-muted-foreground">Verified statutory certificates</p>
-        </div>
-        <div className="dashboard-card p-4">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold uppercase tracking-wider">Due Soon / Review</span>
-            <Clock className="size-4 text-amber-500" />
-          </div>
-          <p className="mt-2 font-display text-3xl font-bold text-amber-600">18</p>
-          <p className="mt-1 text-xs text-amber-600 font-medium">Action required in 30 days</p>
-        </div>
-        <div className="dashboard-card p-4">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold uppercase tracking-wider">Overdue / Non-Compliant</span>
-            <AlertCircle className="size-4 text-rose-500" />
-          </div>
-          <p className="mt-2 font-display text-3xl font-bold text-rose-600">12</p>
-          <p className="mt-1 text-xs text-rose-600 font-medium">Notice issued by authority</p>
-        </div>
+      )}
+
+      <div className="dashboard-card p-4 flex flex-wrap gap-3 items-center">
+        <Filter className="size-4 text-muted-foreground" />
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="rounded-md border bg-background px-3 py-2 text-sm">
+          <option value="">All statuses</option>
+          <option value="overdue">Overdue</option>
+          <option value="pending">Pending</option>
+          <option value="done">Done</option>
+        </select>
+        <select value={mineFilter} onChange={e => setMineFilter(e.target.value)} className="rounded-md border bg-background px-3 py-2 text-sm">
+          <option value="">All mines</option>
+          {mines.map(m => <option key={fmt(m.id)} value={fmt(m.id)}>{fmt(m.name)}</option>)}
+        </select>
       </div>
 
-      {/* Category Progress Section */}
-      <div className="dashboard-card p-5">
-        <h3 className="font-display text-base font-bold mb-4">Compliance Breakdown by Domain</h3>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {categoryProgress.map((cat) => (
-            <div key={cat.name} className="space-y-2 rounded-lg border p-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-foreground">{cat.name}</span>
-                <span className="font-bold text-primary">{cat.percentage}%</span>
+      {error && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive flex justify-between"><span>{error}</span><Button variant="outline" size="sm" onClick={load}>Retry</Button></div>}
+      {completeMsg && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-700">{completeMsg}</p>}
+
+      <div className="space-y-3">
+        {loading && <p className="text-muted-foreground text-sm">Loading tasks…</p>}
+        {!loading && items.length === 0 && <p className="rounded-xl border p-8 text-center text-sm text-muted-foreground">No tasks match the selected filters.</p>}
+        {items.map(task => {
+          const ob = task.obligation as Row | undefined;
+          const status = fmt(task.status);
+          return (
+            <article key={fmt(task.id)} className={`dashboard-card p-4 border ${status === "overdue" ? "border-red-200" : status === "done" ? "border-emerald-200" : ""}`}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded border ${statusColor[status] ?? ""}`}>{status}</span>
+                    {ob && <span className={`text-xs font-semibold ${severityColor[fmt(ob.severity)] ?? ""}`}>{fmt(ob.severity)}</span>}
+                    {ob && <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono">{fmt(ob.code)}</code>}
+                    {Number(task.escalation_level) > 0 && <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">Level {fmt(task.escalation_level)} escalation</span>}
+                  </div>
+                  <p className="font-semibold text-sm leading-snug">{ob ? fmt(ob.title) : `Task #${fmt(task.id)}`}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{ob ? fmt(ob.law_ref) : ""} · Due: {fmt(task.due_date)} · Mine: {fmt(task.mine_name)}</p>
+                  {task.done_by_name && <p className="text-xs text-emerald-600 mt-0.5">✓ Completed by {fmt(task.done_by_name)}</p>}
+                  {Number(task.days_overdue) > 0 && <p className="text-xs text-red-600 mt-0.5">Overdue by {task.days_overdue} days</p>}
+                </div>
+                {status !== "done" && user && canComplete(user.role) && (
+                  <Button size="sm" disabled={completing === Number(task.id)} onClick={() => void complete(Number(task.id))} className="shrink-0">
+                    {completing === Number(task.id) ? "Saving…" : "Mark done"}
+                  </Button>
+                )}
               </div>
-              <div className="progress-track">
-                <span
-                  className={cn("progress-fill", cat.percentage >= 80 ? "progress-safe" : "progress-critical")}
-                  style={{ "--progress": `${cat.percentage}%` } as React.CSSProperties}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
+            </article>
+          );
+        })}
       </div>
-
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search statutory requirement, mine or authority..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full rounded-md border bg-background pl-9 pr-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-muted-foreground">Status:</span>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-md border bg-background px-3 py-1.5 text-xs font-medium outline-none focus:border-primary"
-          >
-            <option value="All">All Statuses</option>
-            <option value="Compliant">Compliant</option>
-            <option value="Expiring Soon">Expiring Soon</option>
-            <option value="Under Review">Under Review</option>
-            <option value="Non-Compliant">Non-Compliant</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Compliance Table */}
-      <div className="dashboard-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="dashboard-table min-w-full">
-            <thead>
-              <tr>
-                <th>Reg ID</th>
-                <th>Statutory Requirement</th>
-                <th>Mine Site</th>
-                <th>Issuing Authority</th>
-                <th>Due Date</th>
-                <th>Certificate Ref</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRules.map((rule) => (
-                <tr key={rule.id} className="hover:bg-muted/30">
-                  <td className="font-mono text-xs font-bold text-primary">{rule.id}</td>
-                  <td className="font-semibold text-foreground">{rule.name}</td>
-                  <td className="text-muted-foreground">{rule.mine}</td>
-                  <td className="text-xs text-muted-foreground">{rule.authority}</td>
-                  <td className="text-xs font-medium">{rule.dueDate}</td>
-                  <td className="font-mono text-xs text-muted-foreground">{rule.certificate}</td>
-                  <td>
-                    <span className={cn("status-badge", `status-${rule.tone}`)}>{rule.status}</span>
-                  </td>
-                  <td>
-                    <Button variant="ghost" size="sm" className="gap-1 text-xs text-primary">
-                      Verify <ExternalLink className="size-3" />
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {page && <div className="text-sm text-muted-foreground">Total: <strong>{page.total}</strong> tasks</div>}
     </div>
   );
 }

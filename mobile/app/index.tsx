@@ -6,9 +6,10 @@ import { colors } from '../src/theme/colors';
 
 export default function IndexScreen() {
   const router = useRouter();
-  const { isAuthenticated, hasOnboardedPermissions } = useAuthStore();
+  const { isAuthenticated, hasOnboardedPermissions, hasHydrated } = useAuthStore();
 
   useEffect(() => {
+    if (!hasHydrated) return;
     const timer = setTimeout(() => {
       if (!hasOnboardedPermissions) {
         router.replace('/(auth)/language' as any);
@@ -20,7 +21,7 @@ export default function IndexScreen() {
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [isAuthenticated, hasOnboardedPermissions]);
+  }, [isAuthenticated, hasOnboardedPermissions, hasHydrated]);
 
   return (
     <View style={styles.container}>

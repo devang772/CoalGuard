@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { MOCK_TASKS } from '../../src/api/mock/data';
+import { fetchTasksApi } from '../../src/api/endpoints';
+import { useApi } from '../../src/lib/useApi';
 import { formatDueText } from '../../src/lib/format';
 import { TrustBadge } from '../../src/components/TrustBadge';
 import { colors } from '../../src/theme/colors';
@@ -11,13 +12,20 @@ export default function TasksScreen() {
   const router = useRouter();
   const [segment, setSegment] = useState<'today' | 'week' | 'overdue' | 'done'>('today');
   const [searchQuery, setSearchQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
-  const filteredTasks = MOCK_TASKS.filter((task) => {
-    if (segment === 'overdue') return task.status === 'overdue';
-    if (segment === 'done') return task.status === 'done';
-    if (segment === 'today') return task.status === 'pending';
-    return true;
-  }).filter((t) => t.obligation.title.toLowerCase().includes(searchQuery.toLowerCase()));
+  const tasks = useApi(() => fetchTasksApi(segment), [segment]);
+
+  const query = searchQuery.toLowerCase();
+  const filteredTasks = (tasks.data || []).filter(
+    (t) => t.obligation.title.toLowerCase().includes(query) || (t.obligation.law_ref || '').toLowerCase().includes(query)
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await tasks.refresh();
+    setRefreshing(false);
+  };
 
   return (
     <View style={styles.container}>
@@ -52,6 +60,9 @@ export default function TasksScreen() {
         data={filteredTasks}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: 16 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.emerald]} tintColor={colors.emerald} />
+        }
         renderItem={({ item }) => {
           const due = formatDueText(item.due_date);
           return (
@@ -82,7 +93,9 @@ export default function TasksScreen() {
                 </Text>
 
                 {item.status === 'done' ? (
-                  <TrustBadge score={item.trust_score} showDetails={false} />
+                  item.trust_score != null ? (
+                    <TrustBadge score={item.trust_score} flags={item.trust_flags} showDetails={false} />
+                  ) : null
                 ) : (
                   <Text style={styles.actionPrompt}>Complete →</Text>
                 )}

@@ -1,8 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
-import { MOCK_CAPAS } from '../../src/api/mock/data';
+import { fetchCapaApi } from '../../src/api/endpoints';
+import { useApi } from '../../src/lib/useApi';
+import { useLiveLocation } from '../../src/lib/location';
+import { getDistanceMeters } from '../../src/lib/geo';
 import { formatDueText } from '../../src/lib/format';
 import { DistanceMeter } from '../../src/components/DistanceMeter';
 import { BigButton } from '../../src/components/BigButton';
@@ -11,9 +13,29 @@ import { colors } from '../../src/theme/colors';
 export default function CapaDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
-  const capa = MOCK_CAPAS.find((c) => c.id === id) || MOCK_CAPAS[0];
+  const capaQuery = useApi(() => fetchCapaApi(String(id)), [id]);
+  const capa = capaQuery.data;
+  const { fix } = useLiveLocation();
+
+  if (!capa) {
+    return (
+      <View style={[styles.container, { flex: 1, justifyContent: 'center', alignItems: 'center' }]}>
+        {capaQuery.loading ? (
+          <ActivityIndicator size="large" color={colors.emerald} />
+        ) : (
+          <Text style={{ color: colors.textSecondary }}>{capaQuery.error || 'CAPA not found'}</Text>
+        )}
+      </View>
+    );
+  }
 
   const due = formatDueText(capa.due_at);
+  const target = capa.before_photo.lat != null && capa.before_photo.lng != null ? capa.before_photo : null;
+  const distance =
+    fix && target
+      ? getDistanceMeters({ latitude: fix.lat, longitude: fix.lng }, { latitude: target.lat!, longitude: target.lng! })
+      : null;
+  const step = capa.escalation_step;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -33,7 +55,10 @@ export default function CapaDetailScreen() {
         </View>
 
         <Text style={styles.desc}>{capa.finding.description}</Text>
-        <Text style={styles.catText}>Category: {capa.finding.category} · CMR Reg 123</Text>
+        <Text style={styles.catText}>
+          Category: {capa.finding.category}
+          {capa.finding.law_ref ? ` · ${capa.finding.law_ref}` : ''}
+        </Text>
 
         {/* Escalation Timeline */}
         <Text style={styles.sectionHeader}>Escalation Status Timeline</Text>
@@ -42,12 +67,12 @@ export default function CapaDetailScreen() {
             <Text style={styles.nodeText}>Assigned</Text>
           </View>
           <View style={styles.timelineLine} />
-          <View style={[styles.timelineNode, styles.nodeDone]}>
+          <View style={[styles.timelineNode, step >= 1 || capa.overdue ? styles.nodeDone : styles.nodePending]}>
             <Text style={styles.nodeText}>Reminder</Text>
           </View>
           <View style={styles.timelineLine} />
-          <View style={[styles.timelineNode, capa.escalation_level !== 'Assigned' ? styles.nodeActive : styles.nodePending]}>
-            <Text style={styles.nodeText}>L1 Escalated</Text>
+          <View style={[styles.timelineNode, step >= 1 ? styles.nodeActive : styles.nodePending]}>
+            <Text style={styles.nodeText}>{step >= 1 ? `${capa.escalation_level} Escalated` : 'L1 Escalated'}</Text>
           </View>
         </View>
       </View>
@@ -55,10 +80,14 @@ export default function CapaDetailScreen() {
       {/* Distance Meter & Location */}
       <View style={styles.card}>
         <Text style={styles.sectionHeader}>Target Spot Distance Check</Text>
-        <DistanceMeter distanceMeters={250} />
+        {distance != null ? (
+          <DistanceMeter distanceMeters={distance} />
+        ) : (
+          <Text style={styles.catText}>{target ? 'Acquiring GPS…' : 'No GPS point recorded for this hazard.'}</Text>
+        )}
       </View>
 
-      {capa.status === 'open' && (
+      {(capa.status === 'open' || capa.status === 'rejected') && (
         <BigButton
           title="Fix Done: Take After Photo →"
           onPress={() => router.push(`/capa/${capa.id}/close` as any)}

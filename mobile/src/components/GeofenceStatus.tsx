@@ -11,7 +11,7 @@ interface GeofenceStatusProps {
 
 export const GeofenceStatus: React.FC<GeofenceStatusProps> = ({
   isInside = true,
-  mineName = 'Moonidih UG',
+  mineName = null,
   accuracyMeters = 8,
 }) => {
   const displayMineName = mineName || 'Mine Unit';

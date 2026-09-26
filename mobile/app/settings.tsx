@@ -35,7 +35,7 @@ export default function SettingsScreen() {
             <TouchableOpacity
               key={sim}
               style={[styles.simBtn, locationSimulation === sim && styles.simBtnActive]}
-              onPress={() => setLocationSimulation(sim)}
+              onPress={() => setLocationSimulation(locationSimulation === sim ? 'real' : sim)}
             >
               <Text style={[styles.simText, locationSimulation === sim && styles.simTextActive]}>
                 {sim.toUpperCase().replace('_', ' ')}

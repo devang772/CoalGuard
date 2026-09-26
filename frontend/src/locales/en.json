@@ -54,7 +54,7 @@
     "upload": "Upload Document",
     "download": "Download Report",
     "verify_chain": "Verify Chain Integrity",
-    "switch_role": "Switch Demo Role",
+    "switch_role": "Account role",
     "search": "Search..."
   }
 }

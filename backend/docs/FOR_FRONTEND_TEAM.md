@@ -1105,3 +1105,17 @@ A backend started with `AUTO_BOOTSTRAP=false` has no demo data; the first admin 
 `python -m seed.create_admin`, and everything else is built through the screens above. The rule catalogue,
 checklists and escalation rules are always installed. The numbers quoted in this file were re-measured from the
 current sample data.
+
+---
+
+### Update: AI endpoints read live data (response shapes)
+- `GET /ai/risk?org_id=` → `{generated_at, model: {trained_at, training_rows, positive_rows, holdout_auc, label, …},
+  results: [{mine_id, mine_name, risk_pct, level, reasons: [{factor, value, impact_pct}], features, features_as_of, source}]}`.
+  `risk_pct` = chance of an incident in the next 14 days. `503` = not enough history yet (show the message).
+- `POST /ai/risk/retrain` (CIL / subsidiary admin) → `{model}`.
+- `GET /ai/anomalies?days=30&category=production|attendance|environment&org_id=` → `{anomalies: [{id, type, mine_id,
+  mine_name, date, value, expected, score, description}]}`; **the list is inside `anomalies`**, not the top level.
+- `GET /ai/recurrence?days=60&org_id=` → `{violations: [{cluster_id, label, keywords, category, count, days_span,
+  first_seen, last_seen, by_mine: [{mine_id, mine_name, count}], finding_ids, sample_findings}]}`.
+- Map / mine list / dashboard `risk` objects carry `source`: `"ml_model"`, or `"rule_score"` + `ml_status` when the
+  model can't run yet.

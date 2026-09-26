@@ -1,21 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { fetchNotificationsApi } from '../src/api/endpoints';
+import { fetchNotificationsApi, markNotificationReadApi } from '../src/api/endpoints';
 import { NotificationItem } from '../src/api/types';
-import { MOCK_NOTIFICATIONS } from '../src/api/mock/data';
 import { formatDateIST } from '../src/lib/format';
 import { colors } from '../src/theme/colors';
 
 export default function NotificationsScreen() {
-  const [notifications, setNotifications] = useState<NotificationItem[]>(MOCK_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadNotifications = async () => {
-    const data = await fetchNotificationsApi();
-    if (data && data.length > 0) {
-      setNotifications(data);
+    try {
+      const data = await fetchNotificationsApi(100);
+      setNotifications(data.items);
+    } catch (err: any) {
+      console.warn('[notifications] load failed:', err.message);
     }
+  };
+
+  const markRead = (item: NotificationItem) => {
+    if (item.read) return;
+    setNotifications((prev) => prev.map((n) => (n.id === item.id ? { ...n, read: true } : n)));
+    markNotificationReadApi(item.id).catch(() => {});
   };
 
   useEffect(() => {
@@ -38,7 +45,7 @@ export default function NotificationsScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.emerald]} tintColor={colors.emerald} />
         }
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.card}>
+          <TouchableOpacity style={styles.card} onPress={() => markRead(item)}>
             <View style={[styles.iconCircle, item.type === 'escalation' && styles.escBg]}>
               <Feather
                 name={item.type === 'escalation' ? 'alert-triangle' : 'bell'}

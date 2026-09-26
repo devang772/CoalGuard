@@ -1,25 +1,53 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { MOCK_CHECKLISTS } from '../../../src/api/mock/data';
+import { fetchChecklistsApi, fetchInspectionDetailApi } from '../../../src/api/endpoints';
+import { useApi } from '../../../src/lib/useApi';
+import { useInspectionDraftStore, EMPTY_ANSWERS } from '../../../src/store/inspection';
+import { minutesSince } from '../../../src/lib/format';
 import { BigButton } from '../../../src/components/BigButton';
 import { colors } from '../../../src/theme/colors';
 
 export default function InspectionChecklistScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
-  const checklist = MOCK_CHECKLISTS[0];
+  const { id, checklistId } = useLocalSearchParams();
+  const inspectionId = String(id);
 
-  const [answers, setAnswers] = useState<Record<string, 'ok' | 'not_ok' | 'na'>>({});
-  const [findingsCount, setFindingsCount] = useState(1);
+  const inspection = useApi(() => fetchInspectionDetailApi(inspectionId), [inspectionId]);
+  const mineId = inspection.data?.mine_id;
+  const wantedChecklist = String(checklistId || inspection.data?.checklist_id || '');
+  const checklists = useApi(() => (mineId ? fetchChecklistsApi(mineId) : Promise.resolve([])), [mineId]);
+  const checklist = (checklists.data || []).find((c) => c.id === wantedChecklist) || checklists.data?.[0];
+
+  const draftAnswers = useInspectionDraftStore((s) => s.answers[inspectionId]);
+  const answers = draftAnswers || EMPTY_ANSWERS;
+  const setAnswer = useInspectionDraftStore((s) => s.setAnswer);
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (!checklist || !inspection.data) {
+    return (
+      <View style={[styles.container, { flex: 1, justifyContent: 'center', alignItems: 'center' }]}>
+        {inspection.loading || checklists.loading ? (
+          <ActivityIndicator size="large" color={colors.emerald} />
+        ) : (
+          <Text style={{ color: colors.textSecondary }}>{inspection.error || checklists.error || 'Checklist not found'}</Text>
+        )}
+      </View>
+    );
+  }
 
   const total = checklist.items.length;
-  const completed = Object.keys(answers).length;
-  const progressPct = Math.round((completed / total) * 100);
+  const completed = checklist.items.filter((item: any) => answers[item.id]).length;
+  const progressPct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   const handleChoice = (itemId: string, choice: 'ok' | 'not_ok' | 'na') => {
-    setAnswers((prev) => ({ ...prev, [itemId]: choice }));
+    setAnswer(inspectionId, itemId, choice);
     if (choice === 'not_ok') {
       router.push(`/inspection/${id}/finding?itemId=${itemId}` as any);
     }
@@ -30,7 +58,9 @@ export default function InspectionChecklistScreen() {
       {/* Header Summary & Progress Bar */}
       <View style={styles.headerCard}>
         <Text style={styles.chkTitle}>{checklist.name}</Text>
-        <Text style={styles.subText}>Timer: 14m elapsed · Moonidih UG</Text>
+        <Text style={styles.subText}>
+          Timer: {minutesSince(inspection.data.started_at)}m elapsed · {inspection.data.mine_name}
+        </Text>
 
         <View style={styles.progressRow}>
           <Text style={styles.progressText}>Progress: {completed} / {total} ({progressPct}%)</Text>
@@ -41,7 +71,7 @@ export default function InspectionChecklistScreen() {
       </View>
 
       {/* Checklist Items */}
-      {checklist.items.map((item, idx) => {
+      {checklist.items.map((item: any, idx: number) => {
         const val = answers[item.id];
         return (
           <View key={item.id} style={styles.itemCard}>

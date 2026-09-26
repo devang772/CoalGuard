@@ -1,240 +1,156 @@
-import { useState } from "react";
-import {
-  FileBarChart,
-  Download,
-  Plus,
-  Search,
-  FileText,
-  Calendar,
-  Sparkles,
-  CheckCircle,
-  X,
-  Printer,
-} from "lucide-react";
+﻿import { useEffect, useState } from "react";
+import { Download, FileText, RefreshCw, CheckCircle, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { generateReportApi, getMinesApi, getReportsApi, verifyReportApi, approveReportApi, type Row } from "@/lib/api";
+import { useAppStore } from "@/store/useAppStore";
+import { getApiBase } from "@/lib/api";
 
-const reportArchives = [
-  {
-    id: "REP-2026-09",
-    title: "DGMS Monthly Statutory Safety & Compliance Dossier (Sep 2026)",
-    mine: "All Coalfields (Aggregate)",
-    author: "System AI / Er. Rajesh Kumar",
-    date: "22 Sep 2026",
-    size: "18.4 MB",
-    format: "PDF",
-    status: "Generated",
-  },
-  {
-    id: "REP-2026-08",
-    title: "Quarterly Highwall Slope Radar Displacement Audit",
-    mine: "Kusunda Opencast Mine",
-    author: "Geospatial AI Engine",
-    date: "15 Sep 2026",
-    size: "8.2 MB",
-    format: "PDF",
-    status: "Generated",
-  },
-  {
-    id: "REP-2026-07",
-    title: "Environmental MoEFCC Air & Water Quality Compliance Matrix",
-    mine: "Jharia & Kusunda Mines",
-    author: "Er. Sneha Das",
-    date: "01 Sep 2026",
-    size: "5.6 MB",
-    format: "XLSX",
-    status: "Generated",
-  },
-  {
-    id: "REP-2026-06",
-    title: "Underground Methane (CH4) Sensor Telemetry Audit Log",
-    mine: "Jharia Underground Coal Mine",
-    author: "IoT Sensor Pipeline",
-    date: "28 Aug 2026",
-    size: "14.1 MB",
-    format: "CSV",
-    status: "Generated",
-  },
-];
-
-const templates = [
-  {
-    title: "DGMS Form IV Monthly Dossier",
-    desc: "Comprehensive safety, gas readings, workforce medicals, and accident log for DGMS submission.",
-    icon: FileText,
-  },
-  {
-    title: "Slope Stability & Radar Summary",
-    desc: "InSAR satellite radar data, micro-displacement heatmaps, and highwall bench angle analysis.",
-    icon: FileBarChart,
-  },
-  {
-    title: "Environmental NOC & Air Quality",
-    desc: "PM10, PM2.5, effluent discharge water testing, and noise emission log sheets.",
-    icon: Sparkles,
-  },
-];
+type RowItem = Row;
+const value = (item: unknown) => item === null || item === undefined || item === "" ? "—" : String(item);
+const ist = (v: unknown) => { try { return new Date(String(v)).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }); } catch { return value(v); } };
+const currentMonth = new Date().toISOString().slice(0, 7);
 
 export function ReportsView() {
-  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
+  const { user } = useAppStore();
+  const [reports, setReports] = useState<RowItem[]>([]);
+  const [mines, setMines] = useState<RowItem[]>([]);
+  const [month, setMonth] = useState(currentMonth);
+  const [mineId, setMineId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [verifyFile, setVerifyFile] = useState<File | null>(null);
+  const [verifyResult, setVerifyResult] = useState<Row | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [approving, setApproving] = useState<number | null>(null);
+
+  const load = async () => {
+    setLoading(true); setError(null);
+    try {
+      const [history, mineList] = await Promise.all([getReportsApi(), getMinesApi()]);
+      setReports(history.items); setMines(mineList);
+    } catch (err) { setError(err instanceof Error ? err.message : "Unable to load reports."); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { void load(); }, []);
+
+  const generate = async () => {
+    setCreating(true); setError(null); setNotice(null);
+    try {
+      const result = await generateReportApi(month, mineId ? Number(mineId) : undefined);
+      setNotice(`${result.reports.length} report file(s) generated.`);
+      await load();
+    } catch (err) { setError(err instanceof Error ? err.message : "Report generation failed."); }
+    finally { setCreating(false); }
+  };
+
+  const verify = async () => {
+    if (!verifyFile) return;
+    setVerifying(true); setVerifyResult(null);
+    try { setVerifyResult(await verifyReportApi(verifyFile) as Row); }
+    catch (err) { setError(err instanceof Error ? err.message : "Verification failed."); }
+    finally { setVerifying(false); }
+  };
+
+  const approve = async (id: number, decision: "approve" | "reject") => {
+    setApproving(id);
+    try { await approveReportApi(id, decision, decision === "reject" ? "Rejected via dashboard" : undefined); await load(); }
+    catch (err) { setError(err instanceof Error ? err.message : "Approval failed."); }
+    finally { setApproving(null); }
+  };
+
+  const canApprove = user && ["mine_manager", "area_gm", "subsidiary_admin", "cil_admin"].includes(user.role);
 
   return (
     <div className="space-y-6">
-      {/* Top Header */}
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
-          <h2 className="font-display text-2xl font-bold tracking-tight">Analytics & Report Generator</h2>
-          <p className="text-sm text-muted-foreground">
-            Generate statutory DGMS dossiers, environmental audits, slope analytics, and custom CSV data exports.
-          </p>
+          <h2 className="font-display text-2xl font-bold tracking-tight">Compliance Reports</h2>
+          <p className="text-sm text-muted-foreground">Generate, download, verify, and approve monthly compliance reports.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={() => setIsGenerateModalOpen(true)} className="gap-2">
-            <Plus className="size-4" /> Generate Custom Report
+        <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading} className="gap-2"><RefreshCw className="size-4" /> Refresh</Button>
+      </div>
+
+      <section className="dashboard-card grid gap-4 p-5 md:grid-cols-[1fr_1fr_auto]">
+        <label className="text-sm font-medium">Report month
+          <input type="month" value={month} onChange={e => setMonth(e.target.value)} className="mt-1 block w-full rounded-md border bg-background p-2" />
+        </label>
+        <label className="text-sm font-medium">Mine scope
+          <select value={mineId} onChange={e => setMineId(e.target.value)} className="mt-1 block w-full rounded-md border bg-background p-2">
+            <option value="">My current organisation scope</option>
+            {mines.map(mine => <option key={value(mine.id)} value={value(mine.id)}>{value(mine.name)}</option>)}
+          </select>
+        </label>
+        <div className="flex items-end">
+          <Button className="w-full gap-2" disabled={creating || !month} onClick={() => void generate()}>
+            <FileText className="size-4" />{creating ? "Generating…" : "Generate PDF + Excel"}
           </Button>
         </div>
-      </div>
+      </section>
 
-      {/* Pre-Built Report Templates */}
-      <div>
-        <h3 className="font-display text-base font-bold mb-3">Pre-Configured Report Templates</h3>
-        <div className="grid gap-4 md:grid-cols-3">
-          {templates.map((tpl) => (
-            <div key={tpl.title} className="dashboard-card p-5 flex flex-col justify-between hover:border-primary/50 transition-all">
-              <div>
-                <tpl.icon className="size-8 text-primary mb-3" />
-                <h4 className="font-display text-base font-bold">{tpl.title}</h4>
-                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{tpl.desc}</p>
-              </div>
-              <Button size="sm" variant="outline" className="mt-4 gap-2 text-xs" onClick={() => setIsGenerateModalOpen(true)}>
-                <Printer className="size-3" /> Quick Generate
-              </Button>
-            </div>
-          ))}
+      {/* Verify section */}
+      <section className="dashboard-card p-5 space-y-3">
+        <h3 className="font-semibold text-sm flex items-center gap-2"><CheckCircle className="size-4 text-emerald-500" /> Verify Report File</h3>
+        <div className="flex items-end gap-3">
+          <label className="flex-1 text-sm font-medium">Upload PDF or Excel to verify
+            <input type="file" accept=".pdf,.xlsx" onChange={e => setVerifyFile(e.target.files?.[0] ?? null)} className="mt-1 block w-full text-sm" />
+          </label>
+          <Button variant="outline" size="sm" onClick={verify} disabled={!verifyFile || verifying} className="gap-1 shrink-0">
+            <Upload className="size-4" />{verifying ? "Checking…" : "Verify"}
+          </Button>
         </div>
-      </div>
+        {verifyResult && (
+          <div className={`rounded-lg border p-3 text-sm ${verifyResult.match ? "border-emerald-500/30 bg-emerald-50 text-emerald-800" : "border-red-500/30 bg-red-50 text-red-800"}`}>
+            {verifyResult.match ? "✓" : "✗"} {value(verifyResult.message)}
+          </div>
+        )}
+      </section>
 
-      {/* Generated Archive Table */}
+      {error && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</p>}
+      {notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-700">{notice}</p>}
+
       <div className="dashboard-card overflow-hidden">
-        <div className="flex items-center justify-between border-b p-4">
-          <h3 className="font-display text-base font-bold">Generated Reports Archive</h3>
-          <span className="text-xs text-muted-foreground">Showing 4 recent reports</span>
-        </div>
         <div className="overflow-x-auto">
           <table className="dashboard-table min-w-full">
-            <thead>
-              <tr>
-                <th>Report ID</th>
-                <th>Report Title</th>
-                <th>Target Mine Site</th>
-                <th>Generated By</th>
-                <th>Date</th>
-                <th>Size</th>
-                <th>Format</th>
-                <th>Action</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Report</th><th>Scope</th><th>Month</th><th>Format</th><th>Status</th><th>Generated</th><th>File</th>{canApprove && <th>Approve</th>}</tr></thead>
             <tbody>
-              {reportArchives.map((rep) => (
-                <tr key={rep.id} className="hover:bg-muted/30">
-                  <td className="font-mono text-xs font-bold text-primary">{rep.id}</td>
-                  <td className="font-semibold text-foreground">{rep.title}</td>
-                  <td className="text-xs text-muted-foreground">{rep.mine}</td>
-                  <td className="text-xs text-muted-foreground">{rep.author}</td>
-                  <td className="text-xs text-muted-foreground">{rep.date}</td>
-                  <td className="text-xs font-mono">{rep.size}</td>
-                  <td>
-                    <span className="text-xs font-bold uppercase text-primary">{rep.format}</span>
-                  </td>
-                  <td>
-                    <Button variant="ghost" size="sm" className="gap-1 text-xs">
-                      <Download className="size-3" /> Download
-                    </Button>
-                  </td>
-                </tr>
-              ))}
+              {loading ? <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">Loading report history…</td></tr>
+                : reports.length === 0 ? <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">No reports have been generated in this scope.</td></tr>
+                : reports.map(report => (
+                  <tr key={value(report.id)}>
+                    <td className="font-mono text-xs font-bold text-primary">#{value(report.id)}</td>
+                    <td>{value(report.scope_label)}</td>
+                    <td>{value(report.month)}</td>
+                    <td className="uppercase">{value(report.format)}</td>
+                    <td>
+                      <span className={`text-xs font-semibold ${value(report.status) === "approved" ? "text-emerald-600" : value(report.status) === "rejected" ? "text-red-600" : "text-muted-foreground"}`}>
+                        {value(report.status)}
+                      </span>
+                      {report.approved_by_name && <p className="text-[10px] text-muted-foreground">by {value(report.approved_by_name)}</p>}
+                    </td>
+                    <td className="text-xs text-muted-foreground">{ist(report.created_at)}</td>
+                    <td>
+                      {report.url
+                        ? <a href={`${getApiBase()}${String(report.url)}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"><Download className="size-3" /> Download</a>
+                        : "—"}
+                    </td>
+                    {canApprove && (
+                      <td>
+                        {value(report.status) === "generated" && Number(report.generated_by) !== user?.id ? (
+                          <div className="flex gap-1">
+                            <Button size="sm" variant="outline" disabled={approving === Number(report.id)} onClick={() => void approve(Number(report.id), "approve")} className="h-6 text-xs text-emerald-700">Approve</Button>
+                            <Button size="sm" variant="outline" disabled={approving === Number(report.id)} onClick={() => void approve(Number(report.id), "reject")} className="h-6 text-xs text-red-700">Reject</Button>
+                          </div>
+                        ) : <span className="text-xs text-muted-foreground">—</span>}
+                      </td>
+                    )}
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>
       </div>
-
-      {/* Generate Custom Report Modal */}
-      {isGenerateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="dashboard-card w-full max-w-lg bg-card p-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="font-display text-lg font-bold">Generate Custom Report</h3>
-              <Button variant="ghost" size="icon" onClick={() => setIsGenerateModalOpen(false)}>
-                <X className="size-4" />
-              </Button>
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                alert("Generating report dossier in background... Download ready shortly!");
-                setIsGenerateModalOpen(false);
-              }}
-              className="mt-4 space-y-4"
-            >
-              <div>
-                <label className="block text-xs font-semibold text-muted-foreground mb-1">Report Title</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. September Safety Audit Summary"
-                  className="w-full rounded-md border bg-background p-2 text-sm outline-none focus:border-primary"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground mb-1">Select Mine Site</label>
-                  <select className="w-full rounded-md border bg-background p-2 text-sm outline-none focus:border-primary">
-                    <option>All Coalfields (Aggregate)</option>
-                    <option>Jharia Underground Coal Mine</option>
-                    <option>Kusunda Opencast Mine</option>
-                    <option>Moonidih Shaft & Washery</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground mb-1">Export Format</label>
-                  <select className="w-full rounded-md border bg-background p-2 text-sm outline-none focus:border-primary">
-                    <option value="PDF">PDF Document</option>
-                    <option value="XLSX">Excel Workbook (XLSX)</option>
-                    <option value="CSV">CSV Raw Data</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-muted-foreground mb-2">Sections to Include</label>
-                <div className="space-y-2 text-xs">
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" defaultChecked className="accent-primary" /> DGMS Statutory Compliance Scores
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" defaultChecked className="accent-primary" /> InSAR Slope Displacement Heatmap
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" defaultChecked className="accent-primary" /> Gas & Methane Telemetry Charts
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" defaultChecked className="accent-primary" /> Incident & RCA Action Tracker
-                  </label>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 border-t pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsGenerateModalOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">Compile & Export</Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

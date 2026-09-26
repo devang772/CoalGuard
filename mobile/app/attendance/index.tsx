@@ -3,42 +3,59 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image } fr
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store/auth';
-import { useSettingsStore } from '../../src/store/settings';
+import { useMasterStore } from '../../src/store/master';
 import { markAttendanceApi } from '../../src/api/endpoints';
+import { useLiveLocation } from '../../src/lib/location';
+import { useCapturedPhoto } from '../../src/lib/capture';
 import { GeofenceStatus } from '../../src/components/GeofenceStatus';
 import { BigButton } from '../../src/components/BigButton';
-import { MOCK_WORKERS } from '../../src/api/mock/data';
 import { colors } from '../../src/theme/colors';
 
 export default function AttendanceScreen() {
   const router = useRouter();
   const { user } = useAuthStore();
-  const { locationSimulation } = useSettingsStore();
+  const workers = useMasterStore((s) => s.workers);
+  const { fix, mine, isInside } = useLiveLocation();
 
   const isContractorAdmin = user?.role === 'contractor_admin';
-  const isInside = locationSimulation === 'inside';
-  const isMocked = locationSimulation === 'mock_gps';
 
-  const [selectedWorker, setSelectedWorker] = useState(MOCK_WORKERS[0]);
-  const [selfieUri, setSelfieUri] = useState<string | null>(null);
+  const [selectedWorkerId, setSelectedWorkerId] = useState<number | null>(null);
+  const selectedWorker = workers.find((w) => w.id === selectedWorkerId) || workers[0] || null;
+  const { uri: selfieUri, meta: selfieMeta, reset: resetSelfie } = useCapturedPhoto();
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ valid: boolean; reason?: string } | null>(null);
+  const [result, setResult] = useState<{ valid: boolean; reason?: string; time?: string } | null>(null);
 
   const handleMarkAttendance = async () => {
     if (!selfieUri) {
       Alert.alert('Selfie Required', 'Please capture a selfie verification photo.');
       return;
     }
+    if (isContractorAdmin && !selectedWorker) {
+      Alert.alert('Select Worker', 'No active workers are registered under your contractor.');
+      return;
+    }
 
     setLoading(true);
     try {
-      const res = await markAttendanceApi(
-        isInside ? 23.7500 : 23.7100,
-        isInside ? 86.4200 : 86.4900,
+      // Location at the moment the selfie was taken (falls back to the live fix).
+      const lat = selfieMeta?.lat ?? fix?.lat ?? null;
+      const lng = selfieMeta?.lng ?? fix?.lng ?? null;
+      const res = await markAttendanceApi({
+        lat,
+        lng,
+        accuracy: selfieMeta?.accuracy ?? fix?.accuracy ?? null,
+        isMocked: Boolean(selfieMeta?.isMocked ?? fix?.isMocked),
         selfieUri,
-        isMocked
-      );
-      setResult(res);
+        selfieMeta,
+        workerId: isContractorAdmin ? selectedWorker?.id : null,
+      });
+      if (res.queued || !res.data) {
+        setResult({ valid: true, reason: 'No network: saved in the outbox, the server will verify it when it syncs.' });
+      } else {
+        setResult(res.data);
+      }
+      // Each mark needs a fresh selfie: re-sending the same photo is flagged as a reused photo.
+      resetSelfie();
     } catch (e: any) {
       Alert.alert('Error', e.message);
     } finally {
@@ -46,25 +63,33 @@ export default function AttendanceScreen() {
     }
   };
 
+  const openSelfieCamera = () => {
+    router.push({ pathname: '/camera' as any, params: { facing: 'front' } });
+  };
+
+  const markedAt = result?.time
+    ? new Date(result.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       {/* Geofence Status */}
       <View style={styles.card}>
         <Text style={styles.label}>Live Mine Geofence Check</Text>
-        <GeofenceStatus isInside={isInside} mineName={user?.mine_name} accuracyMeters={isInside ? 8 : 45} />
+        <GeofenceStatus isInside={isInside} mineName={mine?.name || user?.mine_name} accuracyMeters={fix?.accuracy ?? 0} />
       </View>
 
       {/* Contractor Admin Worker Selector (Gate Kiosk Mode) */}
       {isContractorAdmin && (
         <View style={styles.card}>
           <Text style={styles.label}>Gate Kiosk Mode: Select Worker</Text>
-          {MOCK_WORKERS.map((w) => (
+          {workers.map((w) => (
             <TouchableOpacity
               key={w.id}
-              style={[styles.workerRow, selectedWorker.id === w.id && styles.workerSelected]}
-              onPress={() => setSelectedWorker(w)}
+              style={[styles.workerRow, selectedWorker?.id === w.id && styles.workerSelected]}
+              onPress={() => setSelectedWorkerId(w.id)}
             >
-              <Feather name="user" size={18} color={selectedWorker.id === w.id ? colors.emerald : colors.textSecondary} />
+              <Feather name="user" size={18} color={selectedWorker?.id === w.id ? colors.emerald : colors.textSecondary} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.workerName}>{w.name}</Text>
                 <Text style={styles.contractorName}>{w.contractor_name}</Text>
@@ -77,19 +102,15 @@ export default function AttendanceScreen() {
       {/* Selfie Capture */}
       <View style={styles.card}>
         <Text style={styles.label}>
-          {isContractorAdmin ? `Worker Selfie: ${selectedWorker.name}` : 'Take Attendance Selfie (Front Camera)'}
+          {isContractorAdmin ? `Worker Selfie: ${selectedWorker?.name || '—'}` : 'Take Attendance Selfie (Front Camera)'}
         </Text>
 
         {selfieUri ? (
-          <Image source={{ uri: selfieUri }} style={styles.selfieImage} resizeMode="cover" />
+          <TouchableOpacity onPress={openSelfieCamera} activeOpacity={0.8}>
+            <Image source={{ uri: selfieUri }} style={styles.selfieImage} resizeMode="cover" />
+          </TouchableOpacity>
         ) : (
-          <TouchableOpacity
-            style={styles.selfiePlaceholder}
-            onPress={() => {
-              setSelfieUri('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600');
-              router.push('/camera' as any);
-            }}
-          >
+          <TouchableOpacity style={styles.selfiePlaceholder} onPress={openSelfieCamera}>
             <Feather name="camera" size={36} color={colors.emerald} />
             <Text style={styles.selfieText}>Take Verification Selfie</Text>
           </TouchableOpacity>
@@ -113,7 +134,7 @@ export default function AttendanceScreen() {
           />
           <View style={{ flex: 1 }}>
             <Text style={[styles.resultTitle, { color: result.valid ? colors.success : colors.danger }]}>
-              {result.valid ? '✅ Attendance Marked 07:02 AM' : '❌ Attendance Rejected'}
+              {result.valid ? `✅ Attendance Marked ${markedAt}` : '❌ Attendance Rejected'}
             </Text>
             {result.reason && <Text style={styles.resultReason}>{result.reason}</Text>}
           </View>

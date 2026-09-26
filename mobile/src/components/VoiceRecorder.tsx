@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform } from 'react-native';
+import { BLOCKED_HELP, requestWebMedia, webMediaProblem } from '../lib/webPermissions';
 import { Feather } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
 import { colors } from '../theme/colors';
 
 interface VoiceRecorderProps {
@@ -11,18 +13,18 @@ interface VoiceRecorderProps {
 export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onRecordingComplete, language }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const secondsRef = useRef(0);
 
   useEffect(() => {
     let timer: any;
     if (isRecording) {
       timer = setInterval(() => {
-        setSeconds((prev) => {
-          if (prev >= 59) {
-            stopRecording();
-            return 60;
-          }
-          return prev + 1;
-        });
+        secondsRef.current += 1;
+        setSeconds(secondsRef.current);
+        if (secondsRef.current >= 60) {
+          stopRecording();
+        }
       }, 1000);
     } else {
       setSeconds(0);
@@ -30,14 +32,51 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onRecordingComplet
     return () => clearInterval(timer);
   }, [isRecording]);
 
-  const startRecording = () => {
-    setIsRecording(true);
-    setSeconds(0);
+  useEffect(() => {
+    return () => {
+      recordingRef.current?.stopAndUnloadAsync().catch(() => {});
+    };
+  }, []);
+
+  const startRecording = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        const problem = webMediaProblem();
+        const result = problem ? 'unsupported' : await requestWebMedia('microphone');
+        if (result !== 'granted') {
+          Alert.alert('Microphone blocked', result === 'denied' ? BLOCKED_HELP : problem || 'No microphone was found.');
+          return;
+        }
+      }
+      const perm = await Audio.requestPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Microphone Permission', 'Allow microphone access to report by voice.');
+        return;
+      }
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      recordingRef.current = recording;
+      secondsRef.current = 0;
+      setSeconds(0);
+      setIsRecording(true);
+    } catch (err: any) {
+      Alert.alert('Recording Error', err?.message || 'Could not start the microphone.');
+    }
   };
 
-  const stopRecording = () => {
+  const stopRecording = async () => {
+    const recording = recordingRef.current;
+    recordingRef.current = null;
     setIsRecording(false);
-    onRecordingComplete('mock-audio-recording.m4a', seconds || 5);
+    if (!recording) return;
+    try {
+      await recording.stopAndUnloadAsync();
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+    } catch {
+      // already stopped
+    }
+    const uri = recording.getURI();
+    if (uri) onRecordingComplete(uri, secondsRef.current);
   };
 
   return (

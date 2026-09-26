@@ -8,7 +8,10 @@ import { colors } from '../../src/theme/colors';
 
 export default function ReportSuccessScreen() {
   const router = useRouter();
-  const { refId } = useLocalSearchParams();
+  const { refId, queued, trust, flags } = useLocalSearchParams();
+  const isQueued = queued === '1';
+  const trustScore = trust ? Number(trust) : null;
+  const trustFlags = flags ? String(flags).split(',').filter(Boolean) : [];
 
   return (
     <View style={styles.container}>
@@ -16,15 +19,20 @@ export default function ReportSuccessScreen() {
         <Feather name="check" size={54} color="#FFF" />
       </View>
 
-      <Text style={styles.title}>Report Saved Locally ✓</Text>
-      <Text style={styles.refCode}>Ref ID: {refId || 'REP-88392'}</Text>
+      <Text style={styles.title}>{isQueued ? 'Report Saved Locally ✓' : 'Report Submitted ✓'}</Text>
+      <Text style={styles.refCode}>Ref ID: {refId}</Text>
       <Text style={styles.subText}>
-        Saved to offline outbox. Will sync automatically when network is connected. Satya Proof trust verification attached.
+        {isQueued
+          ? 'Saved to offline outbox. Will sync automatically when network is connected.'
+          : 'Sent to the mine control room. Serious hazards automatically become a CAPA.'}
+        {trustScore != null ? ' Satya Proof trust verification attached.' : ''}
       </Text>
 
-      <View style={{ marginVertical: 20 }}>
-        <TrustBadge score={94} />
-      </View>
+      {trustScore != null && (
+        <View style={{ marginVertical: 20 }}>
+          <TrustBadge score={trustScore} flags={trustFlags} />
+        </View>
+      )}
 
       <BigButton
         title="Return to Home Dashboard"

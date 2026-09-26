@@ -21,6 +21,10 @@ export function formatTimeOnly(dateStr: string): string {
 export function formatDueText(dueAtISO: string): { text: string; isOverdue: boolean } {
   try {
     const dueDate = parseISO(dueAtISO);
+    // A plain date ("2026-09-26") is due by the end of that day.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dueAtISO)) {
+      dueDate.setHours(23, 59, 59, 999);
+    }
     const now = new Date();
 
     if (isAfter(now, dueDate)) {
@@ -37,4 +41,10 @@ export function formatDueText(dueAtISO: string): { text: string; isOverdue: bool
   } catch {
     return { text: 'Due soon', isOverdue: false };
   }
+}
+
+export function minutesSince(iso?: string | null, until?: string | null): number {
+  if (!iso) return 0;
+  const end = until ? new Date(until).getTime() : Date.now();
+  return Math.max(0, Math.round((end - new Date(iso).getTime()) / 60000));
 }
