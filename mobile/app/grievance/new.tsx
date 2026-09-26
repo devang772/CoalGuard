@@ -5,6 +5,7 @@ import { Feather } from '@expo/vector-icons';
 import { BigButton } from '../../src/components/BigButton';
 import { submitGrievanceApi } from '../../src/api/endpoints';
 import { useAuthStore } from '../../src/store/auth';
+import { saveGrievanceToken } from '../../src/lib/grievanceStorage';
 import { colors } from '../../src/theme/colors';
 
 const CATEGORIES = [
@@ -51,6 +52,7 @@ export default function NewGrievanceScreen() {
         return;
       }
       setTokenResult(res.data.token);
+      void saveGrievanceToken(res.data.token, selectedCat);
     } catch (e: any) {
       Alert.alert('Error', e.message);
     } finally {
