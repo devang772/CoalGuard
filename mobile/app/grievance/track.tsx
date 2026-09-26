@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { trackGrievanceApi } from '../../src/api/endpoints';
@@ -8,20 +8,28 @@ import { colors } from '../../src/theme/colors';
 
 export default function TrackGrievanceScreen() {
   const params = useLocalSearchParams();
-  const [tokenInput, setTokenInput] = useState((params.token as string) || 'GRV-7F3K');
+  const [tokenInput, setTokenInput] = useState((params.token as string) || '');
   const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
   const [grievanceData, setGrievanceData] = useState<GrievanceItem | null>(null);
 
   const handleTrack = async () => {
     if (!tokenInput.trim()) return;
     setLoading(true);
-    const res = await trackGrievanceApi(tokenInput.trim());
-    setGrievanceData(res);
-    setLoading(false);
+    try {
+      const res = await trackGrievanceApi(tokenInput.trim());
+      setGrievanceData(res);
+    } catch (e: any) {
+      setGrievanceData(null);
+      Alert.alert('Error', e.message);
+    } finally {
+      setSearched(true);
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    handleTrack();
+    if (tokenInput.trim()) handleTrack();
   }, []);
 
   return (
@@ -66,7 +74,7 @@ export default function TrackGrievanceScreen() {
               </View>
               <View style={styles.stepTextCol}>
                 <Text style={styles.stepTitle}>Grievance Registered</Text>
-                <Text style={styles.stepTime}>{new Date(grievanceData.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                <Text style={styles.stepTime}>{new Date(grievanceData.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
               </View>
             </View>
 
@@ -85,18 +93,18 @@ export default function TrackGrievanceScreen() {
             <View style={styles.stepLine} />
 
             <View style={styles.stepRow}>
-              <View style={[styles.stepCircle, grievanceData.status === 'resolved' ? styles.stepDone : styles.stepPending]}>
-                {grievanceData.status === 'resolved' ? (
+              <View style={[styles.stepCircle, (grievanceData.status === 'resolved' || grievanceData.status === 'closed') ? styles.stepDone : styles.stepPending]}>
+                {(grievanceData.status === 'resolved' || grievanceData.status === 'closed') ? (
                   <Feather name="check" size={14} color="#FFF" />
                 ) : (
                   <Text style={{ color: '#94A3B8', fontWeight: '800' }}>3</Text>
                 )}
               </View>
               <View style={styles.stepTextCol}>
-                <Text style={[styles.stepTitle, { color: grievanceData.status === 'resolved' ? colors.textPrimary : '#94A3B8' }]}>
+                <Text style={[styles.stepTitle, { color: (grievanceData.status === 'resolved' || grievanceData.status === 'closed') ? colors.textPrimary : '#94A3B8' }]}>
                   Resolution & Action Taken
                 </Text>
-                <Text style={styles.stepTime}>{grievanceData.status === 'resolved' ? 'Resolved' : 'Pending review'}</Text>
+                <Text style={styles.stepTime}>{(grievanceData.status === 'resolved' || grievanceData.status === 'closed') ? 'Resolved' : 'Pending review'}</Text>
               </View>
             </View>
           </View>
@@ -112,13 +120,13 @@ export default function TrackGrievanceScreen() {
             </View>
           )}
         </View>
-      ) : (
+      ) : searched ? (
         <View style={styles.card}>
           <Text style={{ color: colors.textSecondary, textAlign: 'center' }}>
             No grievance record found for token "{tokenInput}".
           </Text>
         </View>
-      )}
+      ) : null}
     </ScrollView>
   );
 }

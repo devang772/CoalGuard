@@ -55,6 +55,7 @@ async def lifespan(app: FastAPI):
         _safety_warnings(db)
     if settings.scheduler_enabled:
         scheduler.start()
+        _warm_risk_model()
     yield
     scheduler.stop()
 
@@ -149,16 +150,37 @@ app.include_router(users.router)
 app.include_router(me.router)
 
 
+def _warm_risk_model() -> None:
+    """Load the ML models (risk, speech) in the background so the first request doesn't wait."""
+    import threading
+
+    def run():
+        try:
+            from app.ai.risk_model import load_model
+            with SessionLocal() as db:
+                load_model(db)
+        except Exception as exc:  # noqa: BLE001 - the map falls back to the labelled rule score
+            log.warning("Risk model not ready: %s", exc)
+        try:
+            from app.ai.voice import warm_up
+            warm_up()                                   # load the Whisper speech model once, not on the first report
+        except ImportError:
+            pass
+
+    threading.Thread(target=run, name="risk-model-warmup", daemon=True).start()
+
+
 def _include_ai_router() -> None:
     """The ML teammate's /ai/* endpoints live in app/routers/ai.py. They are picked up automatically when the file
     exists, so merging their code needs no change here. A broken AI module is logged and skipped; the rest of
     the API keeps working."""
+    import importlib
     import importlib.util
     if importlib.util.find_spec("app.routers.ai") is None:
         log.info("AI router not installed yet (app/routers/ai.py); /ai/* endpoints are not available.")
         return
     try:
-        from app.routers import ai
+        ai = importlib.import_module("app.routers.ai")
         app.include_router(ai.router)
         log.info("AI router loaded: /ai/* endpoints available.")
     except Exception:  # noqa: BLE001

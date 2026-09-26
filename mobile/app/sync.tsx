@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSyncStore } from '../src/store/sync';
 import { useSettingsStore } from '../src/store/settings';
 import { getAllOutboxItems, deleteOutboxItem, OutboxItem } from '../src/offline/outbox';
 import { processOutboxSync } from '../src/offline/syncEngine';
+import { useMasterStore } from '../src/store/master';
 import { BigButton } from '../src/components/BigButton';
 import { colors } from '../src/theme/colors';
 
@@ -15,11 +16,20 @@ export default function SyncStatusScreen() {
   const [outboxItems, setOutboxItems] = useState<OutboxItem[]>(getAllOutboxItems());
   const [syncingNow, setSyncingNow] = useState(false);
 
+  // Keep the list in step with background syncs.
+  useEffect(() => {
+    setOutboxItems(getAllOutboxItems());
+  }, [pendingCount, failedCount, isSyncing]);
+
   const handleSyncNow = async () => {
     setSyncingNow(true);
-    await processOutboxSync();
+    const res = await processOutboxSync();
+    await useMasterStore.getState().load();
     setOutboxItems(getAllOutboxItems());
     setSyncingNow(false);
+    if (res.errorCount > 0) {
+      Alert.alert('Sync Finished', `${res.syncedCount} item(s) synced, ${res.errorCount} rejected by the server (see errors below).`);
+    }
   };
 
   const handleDelete = (clientUuid: string) => {

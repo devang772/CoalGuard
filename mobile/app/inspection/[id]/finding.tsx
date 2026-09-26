@@ -1,11 +1,15 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Image } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { BigButton } from '../../../src/components/BigButton';
-import { useSettingsStore } from '../../../src/store/settings';
 import { addFindingApi } from '../../../src/api/endpoints';
+import { useCapturedPhoto } from '../../../src/lib/capture';
+import { getCurrentFix } from '../../../src/lib/location';
 import { colors } from '../../../src/theme/colors';
+
+// UI tile key → backend finding category.
+const CATEGORY_API_KEYS: Record<string, string> = { haul: 'haul_road' };
 
 const CATEGORIES = [
   { key: 'roof', label: 'Roof/Side Fall', icon: 'shield' },
@@ -27,27 +31,44 @@ const SEVERITIES = [
 
 export default function AddFindingScreen() {
   const router = useRouter();
+  const { id, itemId } = useLocalSearchParams();
   const [selectedCat, setSelectedCat] = useState('roof');
   const [selectedSev, setSelectedSev] = useState('high');
   const [description, setDescription] = useState('');
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
-
-  useFocusEffect(
-    useCallback(() => {
-      const { lastCapturedPhoto } = useSettingsStore.getState();
-      if (lastCapturedPhoto) {
-        setPhotoUri(lastCapturedPhoto);
-      }
-    }, [])
-  );
+  const { uri: photoUri, meta: photoMeta } = useCapturedPhoto();
+  const [saving, setSaving] = useState(false);
 
   const handleSaveFinding = async () => {
     if (!description && !photoUri) {
       Alert.alert('Required Info', 'Please provide a finding description or photo proof.');
       return;
     }
-    Alert.alert('Finding Saved', 'Hazard finding added to inspection draft!');
-    router.back();
+    const categoryLabel = CATEGORIES.find((c) => c.key === selectedCat)?.label || selectedCat;
+    const text = description.trim().length >= 3 ? description.trim() : `${categoryLabel} hazard (see photo)`;
+
+    setSaving(true);
+    try {
+      const fix = photoMeta?.lat != null ? null : await getCurrentFix();
+      const res = await addFindingApi(String(id), {
+        category: CATEGORY_API_KEYS[selectedCat] || selectedCat,
+        description: text,
+        severity: selectedSev as any,
+        lat: photoMeta?.lat ?? fix?.lat ?? null,
+        lng: photoMeta?.lng ?? fix?.lng ?? null,
+        checklistItemId: itemId ? String(itemId) : null,
+        photoUri,
+        photoMeta,
+      });
+      Alert.alert(
+        'Finding Saved',
+        res.queued ? 'No network: the finding is in the outbox and will sync automatically.' : 'Hazard finding added to the inspection.'
+      );
+      router.back();
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -129,7 +150,7 @@ export default function AddFindingScreen() {
         />
       </View>
 
-      <BigButton title="Save Finding to Inspection" onPress={handleSaveFinding} />
+      <BigButton title="Save Finding to Inspection" onPress={handleSaveFinding} loading={saving} />
     </ScrollView>
   );
 }

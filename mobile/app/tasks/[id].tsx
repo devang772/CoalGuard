@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Alert, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, Alert, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { MOCK_TASKS } from '../../src/api/mock/data';
-import { completeTaskApi } from '../../src/api/endpoints';
+import { completeTaskApi, fetchTaskApi } from '../../src/api/endpoints';
+import { useApi } from '../../src/lib/useApi';
+import { useCapturedPhoto } from '../../src/lib/capture';
 import { BigButton } from '../../src/components/BigButton';
 import { formatDueText } from '../../src/lib/format';
 import { TrustBadge } from '../../src/components/TrustBadge';
@@ -12,32 +13,56 @@ import { colors } from '../../src/theme/colors';
 export default function TaskDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
-  const task = MOCK_TASKS.find((t) => t.id === id) || MOCK_TASKS[0];
+  const taskQuery = useApi(() => fetchTaskApi(String(id)), [id]);
+  const task = taskQuery.data;
 
   const [remarks, setRemarks] = useState('');
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const { uri: capturedUri, meta: photoMeta } = useCapturedPhoto();
+  const photoUri = capturedUri || task?.evidence?.url || null;
   const [loading, setLoading] = useState(false);
-  const [completedResult, setCompletedResult] = useState<any>(null);
+  const [completedResult, setCompletedResult] = useState<{ trust_score?: number | null; flags?: string[] } | null>(null);
+
+  if (!task) {
+    return (
+      <View style={[styles.container, { flex: 1, justifyContent: 'center', alignItems: 'center' }]}>
+        {taskQuery.loading ? (
+          <ActivityIndicator size="large" color={colors.emerald} />
+        ) : (
+          <Text style={{ color: colors.textSecondary }}>{taskQuery.error || 'Task not found'}</Text>
+        )}
+      </View>
+    );
+  }
 
   const due = formatDueText(task.due_date);
 
   const handleComplete = async () => {
-    if (!photoUri && task.status !== 'done') {
+    if (!capturedUri && task.status !== 'done') {
       Alert.alert('Evidence Required', 'Please take a Satya Proof photo before completing this obligation.');
       return;
     }
 
     setLoading(true);
     try {
-      const res = await completeTaskApi(task.id, 'evid-999', remarks);
-      setCompletedResult(res);
-      Alert.alert('Task Completed ✓', 'Evidence saved to outbox & verified with Trust Score 92!');
+      const res = await completeTaskApi(task.id, capturedUri, photoMeta, remarks);
+      if (res.queued) {
+        setCompletedResult({ trust_score: null, flags: [] });
+        Alert.alert('Saved Offline', 'No network. The completion and photo are in the outbox and will sync automatically.');
+      } else {
+        const score = res.evidence?.trust_score ?? res.data?.trust_score ?? null;
+        setCompletedResult({ trust_score: score, flags: res.evidence?.flags || [] });
+        Alert.alert('Task Completed ✓', score != null ? `Evidence verified with Trust Score ${score}.` : 'Task marked complete.');
+        taskQuery.refresh();
+      }
     } catch (e: any) {
       Alert.alert('Error', e.message);
     } finally {
       setLoading(false);
     }
   };
+
+  const doneScore = completedResult?.trust_score ?? task.trust_score;
+  const doneFlags = completedResult?.flags ?? task.trust_flags;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -75,7 +100,6 @@ export default function TaskDetailScreen() {
           </View>
         ) : (
           <TouchableOpacity style={styles.uploadPlaceholder} onPress={() => {
-            setPhotoUri('https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=600');
             router.push('/camera' as any);
           }}>
             <Feather name="camera" size={36} color={colors.emerald} />
@@ -99,7 +123,7 @@ export default function TaskDetailScreen() {
           <View style={styles.doneBanner}>
             <Feather name="check-circle" size={24} color={colors.success} />
             <Text style={styles.doneText}>Obligation Completed & Verified</Text>
-            <TrustBadge score={92} />
+            {doneScore != null && <TrustBadge score={doneScore} flags={doneFlags} />}
           </View>
         ) : (
           <BigButton

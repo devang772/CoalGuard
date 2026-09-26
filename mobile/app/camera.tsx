@@ -1,35 +1,55 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
+import { BLOCKED_HELP, webMediaProblem } from '../src/lib/webPermissions';
 import { compressAndWatermarkPhoto } from '../src/lib/evidence';
+import { getAppDeviceInfo } from '../src/lib/deviceInfo';
+import { getCurrentFix, useLiveLocation } from '../src/lib/location';
 import { useSettingsStore } from '../src/store/settings';
+import { useAuthStore } from '../src/store/auth';
 import { colors } from '../src/theme/colors';
 
 export default function CameraScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { locationSimulation, setLastCapturedPhoto } = useSettingsStore();
+  const { setLastCapturedPhoto } = useSettingsStore();
+  const { user } = useAuthStore();
+  const { fix, mine, isInside } = useLiveLocation();
+  const [nativePermission, requestNativePermission] = useCameraPermissions();
 
   const [capturedUri, setCapturedUri] = useState<string | null>(null);
+  const [captureMeta, setCaptureMeta] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [gpsAccuracy, setGpsAccuracy] = useState(8);
   const [hasWebcamPermission, setHasWebcamPermission] = useState<boolean | null>(null);
 
   const videoRef = useRef<any>(null);
   const streamRef = useRef<any>(null);
+  const nativeCameraRef = useRef<CameraView>(null);
 
-  const isInside = locationSimulation === 'inside';
-  const isMocked = locationSimulation === 'mock_gps';
   const ghostOverlay = params.ghostUri as string;
-
-  const mockLat = 23.7505;
-  const mockLng = 86.4205;
+  const facing = params.facing === 'front' ? 'front' : 'back';
+  const mineName = mine?.name || user?.mine_name || 'Mine';
 
   useEffect(() => {
-    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.mediaDevices) {
+    if (Platform.OS !== 'web' && nativePermission && !nativePermission.granted && nativePermission.canAskAgain) {
+      requestNativePermission();
+    }
+  }, [nativePermission]);
+
+  useEffect(() => {
+    const problem = Platform.OS === 'web' ? webMediaProblem() : null;
+    if (problem) {
+      setHasWebcamPermission(false);
+      Alert.alert('Camera blocked', `${problem}\n\nYou can still pick a photo file.`);
+    }
+    if (Platform.OS === 'web' && !problem && typeof navigator !== 'undefined' && navigator.mediaDevices) {
       navigator.mediaDevices
-        .getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } })
+        .getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: facing === 'front' ? 'user' : 'environment' },
+        })
         .then((stream) => {
           streamRef.current = stream;
           setHasWebcamPermission(true);
@@ -41,6 +61,8 @@ export default function CameraScreen() {
         .catch((err) => {
           console.warn('[Camera] PC Webcam access error:', err);
           setHasWebcamPermission(false);
+          Alert.alert('Camera not available',
+            `${err?.name === 'NotAllowedError' ? BLOCKED_HELP : err?.message || 'No camera was found.'}\n\nYou can still pick a photo file.`);
         });
     }
 
@@ -51,12 +73,9 @@ export default function CameraScreen() {
     };
   }, []);
 
-  const handleCapture = async () => {
-    setIsProcessing(true);
-    let rawUri = 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=800';
-
-    if (Platform.OS === 'web' && videoRef.current && hasWebcamPermission) {
-      try {
+  const takeRawPhoto = async (): Promise<string | null> => {
+    if (Platform.OS === 'web') {
+      if (videoRef.current && hasWebcamPermission) {
         const video = videoRef.current;
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth || 640;
@@ -64,30 +83,61 @@ export default function CameraScreen() {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          rawUri = canvas.toDataURL('image/jpeg', 0.85);
+          return canvas.toDataURL('image/jpeg', 0.85);
         }
-      } catch (e) {
-        console.warn('[Camera] Canvas snapshot error:', e);
       }
+      // No webcam: pick a photo file instead.
+      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 });
+      return picked.canceled ? null : picked.assets[0].uri;
     }
 
-    const compressed = await compressAndWatermarkPhoto(rawUri, {
-      latitude: mockLat,
-      longitude: mockLng,
-      accuracy: gpsAccuracy,
-      deviceTime: new Date().toISOString(),
-      deviceId: Platform.OS === 'web' ? 'DEV-PC-WEBCAM-01' : 'DEV-MOBILE-NETRA-01',
-      isMocked,
-      mineName: 'Moonidih UG',
-      userName: 'Ramesh Sharma',
-    });
+    if (!nativePermission?.granted) {
+      const res = await requestNativePermission();
+      if (!res.granted) {
+        Alert.alert('Camera Permission', 'Allow camera access to capture Satya Proof evidence.');
+        return null;
+      }
+    }
+    const photo = await nativeCameraRef.current?.takePictureAsync({ quality: 0.85 });
+    return photo?.uri || null;
+  };
 
-    setCapturedUri(compressed);
-    setLastCapturedPhoto(compressed);
-    setIsProcessing(false);
+  const handleCapture = async () => {
+    setIsProcessing(true);
+    try {
+      const [rawUri, position, device] = await Promise.all([takeRawPhoto(), getCurrentFix(), getAppDeviceInfo()]);
+      if (!rawUri) return;
+
+      const meta = {
+        lat: position?.lat ?? null,
+        lng: position?.lng ?? null,
+        accuracy: position?.accuracy ?? null,
+        isMocked: Boolean(position?.isMocked),
+        deviceTime: new Date().toISOString(),
+      };
+
+      const compressed = await compressAndWatermarkPhoto(rawUri, {
+        latitude: meta.lat ?? 0,
+        longitude: meta.lng ?? 0,
+        accuracy: meta.accuracy ?? 0,
+        deviceTime: meta.deviceTime,
+        deviceId: device.deviceId,
+        isMocked: meta.isMocked,
+        mineName,
+        userName: user?.name || '',
+      });
+
+      setCapturedUri(compressed);
+      setCaptureMeta(meta);
+    } catch (e: any) {
+      Alert.alert('Camera Error', e?.message || 'Could not capture the photo.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleConfirmPhoto = () => {
+    setLastCapturedPhoto(capturedUri, captureMeta);
     router.back();
   };
 
@@ -102,13 +152,15 @@ export default function CameraScreen() {
         <View style={styles.overlayRow}>
           <Feather name="map-pin" size={14} color={colors.emerald} />
           <Text style={styles.overlayText}>
-            {mockLat.toFixed(4)} N, {mockLng.toFixed(4)} E (±{gpsAccuracy}m)
+            {fix
+              ? `${fix.lat.toFixed(4)} N, ${fix.lng.toFixed(4)} E (±${fix.accuracy ?? '?'}m)`
+              : 'Acquiring GPS…'}
           </Text>
         </View>
         <View style={styles.overlayRow}>
           <Feather name="shield" size={14} color={isInside ? colors.success : colors.danger} />
           <Text style={[styles.overlayText, { color: isInside ? colors.success : colors.danger }]}>
-            Moonidih UG · {isInside ? 'Inside Mine ✓' : 'Outside Boundary ⚠'}
+            {mineName} · {isInside ? 'Inside Mine ✓' : 'Outside Boundary ⚠'}
           </Text>
         </View>
       </View>
@@ -119,6 +171,9 @@ export default function CameraScreen() {
           <Image source={{ uri: capturedUri }} style={styles.previewImage} resizeMode="cover" />
         ) : (
           <View style={styles.mockLens}>
+            {Platform.OS !== 'web' && nativePermission?.granted && (
+              <CameraView ref={nativeCameraRef} facing={facing} style={StyleSheet.absoluteFill} />
+            )}
             {Platform.OS === 'web' && (
               <video
                 ref={(el) => {
@@ -146,6 +201,10 @@ export default function CameraScreen() {
             <Text style={styles.viewfinderHint}>
               {ghostOverlay
                 ? 'Ghost Overlay Active · Align Before-Photo Scene'
+                : Platform.OS !== 'web'
+                ? nativePermission?.granted
+                  ? 'Satya Proof Camera Active · Frame Hazard / Selfie'
+                  : 'Camera permission needed · Tap capture to allow'
                 : hasWebcamPermission === false
                 ? 'PC Webcam Blocked · Using Satya Fallback Camera'
                 : 'Satya Proof PC Camera Active · Frame Hazard / Selfie'}

@@ -178,7 +178,8 @@ def test_morning_digest_and_nightly(ids):
     before = count(ids["manager"], kind="digest")
     assert run("morning_digest")["digests_sent"] > 0
     assert count(ids["manager"], kind="digest") == before + 1
-    assert set(run("nightly")) == {"tasks_created", "tasks_marked_overdue", "contractor_scores_updated"}
+    assert set(run("nightly")) == {"tasks_created", "tasks_marked_overdue", "contractor_scores_updated",
+                                  "risk_model"}
 
 
 def test_stored_contractor_scores_match_the_api(client, login):

@@ -3,33 +3,41 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, I
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store/auth';
-import { useSettingsStore } from '../../src/store/settings';
 import { useSyncStore } from '../../src/store/sync';
 import { isOfficerRole } from '../../src/lib/rbac';
+import { useLiveLocation } from '../../src/lib/location';
+import { useApi } from '../../src/lib/useApi';
+import { fetchCapasApi, fetchNotificationsApi, fetchTaskSummaryApi } from '../../src/api/endpoints';
 import { ConnectivityBanner } from '../../src/components/ConnectivityBanner';
 import { SOSFab } from '../../src/components/SOSFab';
 import { BigButton } from '../../src/components/BigButton';
-import { MOCK_TASKS, MOCK_CAPAS, MOCK_NOTIFICATIONS } from '../../src/api/mock/data';
 import { colors } from '../../src/theme/colors';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuthStore();
-  const { locationSimulation } = useSettingsStore();
   const { pendingCount } = useSyncStore();
   const [refreshing, setRefreshing] = useState(false);
+  const { fix, mine, isInside, refresh: refreshLocation } = useLiveLocation();
 
   const isOfficer = isOfficerRole(user?.role);
-  const isInside = locationSimulation === 'inside';
+  const mineName = mine?.name || user?.mine_name || 'Mine';
 
-  const onRefresh = () => {
+  const summary = useApi(() => (isOfficer ? fetchTaskSummaryApi() : Promise.resolve(null)), [isOfficer]);
+  const openCapas = useApi(() => (isOfficer ? fetchCapasApi('open') : Promise.resolve([])), [isOfficer]);
+  const notifications = useApi(() => fetchNotificationsApi(5), []);
+
+  const onRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
+    await Promise.all([summary.refresh(), openCapas.refresh(), notifications.refresh(), refreshLocation()]);
+    setRefreshing(false);
   };
 
-  const overdueTasksCount = MOCK_TASKS.filter((t) => t.status === 'overdue').length;
-  const todayTasksCount = MOCK_TASKS.filter((t) => t.status === 'pending').length;
-  const openCapasCount = MOCK_CAPAS.filter((c) => c.status === 'open').length;
+  const overdueTasksCount = summary.data?.overdue ?? 0;
+  const todayTasksCount = summary.data?.due_today ?? 0;
+  const openCapasCount = openCapas.data?.length ?? 0;
+  const alerts = notifications.data?.items ?? [];
+  const unread = notifications.data?.unread ?? 0;
 
   return (
     <View style={styles.screen}>
@@ -53,14 +61,14 @@ export default function HomeScreen() {
             <View style={styles.onlineDot} />
             <TouchableOpacity onPress={() => router.push('/notifications' as any)} style={styles.iconBtn}>
               <Feather name="bell" size={20} color="#FFF" />
-              <View style={styles.notifBadge} />
+              {unread > 0 && <View style={styles.notifBadge} />}
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Hero Mine Pit Vision Card matching Reference Screenshot */}
         <ImageBackground
-          source={{ uri: 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=800' }}
+          source={require('../../assets/coalguard-digital-twin.jpg')}
           style={styles.heroCard}
           imageStyle={styles.heroImage}
         >
@@ -71,7 +79,7 @@ export default function HomeScreen() {
 
             <View style={styles.heroFooter}>
               <Text style={styles.benchTag}>
-                {isInside ? 'MOONIDIH UG · SEAM 03' : 'OUTSIDE MINE BOUNDARY'}
+                {isInside ? mineName.toUpperCase() : 'OUTSIDE MINE BOUNDARY'}
               </Text>
             </View>
           </View>
@@ -95,7 +103,7 @@ export default function HomeScreen() {
               <Text style={styles.cardSubLabel}>GPS Locked</Text>
             </View>
             <Text style={styles.cardMainVal}>
-              {isInside ? '23.7957° N' : 'Outside Boundary'}
+              {!fix ? 'Locating…' : isInside ? `${fix.lat.toFixed(4)}° N` : 'Outside Boundary'}
             </Text>
           </View>
 
@@ -192,7 +200,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {MOCK_NOTIFICATIONS.map((item) => (
+        {alerts.map((item) => (
           <TouchableOpacity key={item.id} style={styles.notifCard} onPress={() => router.push('/notifications' as any)}>
             <Feather
               name={item.type === 'escalation' ? 'alert-triangle' : 'info'}

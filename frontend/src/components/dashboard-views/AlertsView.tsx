@@ -1,220 +1,99 @@
-import { useState } from "react";
-import {
-  Bell,
-  AlertTriangle,
-  Siren,
-  CheckCircle2,
-  Filter,
-  Plus,
-  Radio,
-  Sliders,
-  X,
-  Eye,
-  Check,
-} from "lucide-react";
+﻿import { useCallback, useEffect, useState } from "react";
+import { Bell, BellOff, CheckCheck, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { getNotificationsApi, markNotificationReadApi, markAllNotificationsReadApi, type Page, type Row } from "@/lib/api";
 
-const alertsFeed = [
-  {
-    id: "ALT-8841",
-    level: "CRITICAL",
-    tone: "critical",
-    message: "Highwall Slope Micro-Displacement Exceeds 4.5mm/hr",
-    mine: "Kusunda Opencast Mine (West Wall Bench 4)",
-    time: "12 mins ago",
-    sensor: "Radar InSAR #04",
-    status: "Unacknowledged",
-  },
-  {
-    id: "ALT-8840",
-    level: "HIGH",
-    tone: "high",
-    message: "Gas Sensor #14 CO Spike Recorded at 28 PPM",
-    mine: "Jharia Underground Coal Mine (Seam 9 Face 3)",
-    time: "45 mins ago",
-    sensor: "IoT Methane Node #14",
-    status: "Acknowledged",
-  },
-  {
-    id: "ALT-8839",
-    level: "MEDIUM",
-    tone: "medium",
-    message: "Statutory Environmental Clearance Renewal Required in 7 Days",
-    mine: "Moonidih Shaft & Washery",
-    time: "2 hours ago",
-    sensor: "Compliance System Engine",
-    status: "Acknowledged",
-  },
-  {
-    id: "ALT-8838",
-    level: "INFO",
-    tone: "info",
-    message: "Satellite InSAR Synthetic Aperture Sync Completed for Dhanbad Cluster",
-    mine: "Dhanbad Coalfield Region",
-    time: "4 hours ago",
-    sensor: "Sentinel-1 Constellation",
-    status: "System Logged",
-  },
-];
+const fmt = (v: unknown) => !v ? "—" : String(v);
+const ist = (v: unknown) => { try { return new Date(String(v)).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }); } catch { return fmt(v); } };
+const levelClass: Record<string, string> = { critical: "bg-red-500/10 border-red-500/30 text-red-700", warning: "bg-amber-500/10 border-amber-500/30 text-amber-700", info: "bg-blue-500/10 border-blue-500/30 text-blue-600" };
+const kindIcon: Record<string, string> = { sos: "🆘", incident: "⚠️", finding: "🔍", capa: "🛡️", grievance: "📣", reminder: "⏰", escalation: "🪜", digest: "☀️", general: "🔔" };
 
 export function AlertsView() {
-  const [filterLevel, setFilterLevel] = useState("All");
-  const [alerts, setAlerts] = useState(alertsFeed);
-  const [isThresholdModalOpen, setIsThresholdModalOpen] = useState(false);
+  const [page, setPage] = useState<Page<Row> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [acting, setActing] = useState<number | null>(null);
+  const [filter, setFilter] = useState<string>("");
 
-  const handleAcknowledge = (id: string) => {
-    setAlerts((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, status: "Acknowledged" } : item))
-    );
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try { setPage(await getNotificationsApi(filter ? { unread: filter } : {})); }
+    catch (e) { setError(e instanceof Error ? e.message : "Failed to load notifications"); }
+    finally { setLoading(false); }
+  }, [filter]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const markOne = async (id: number) => {
+    setActing(id);
+    try { await markNotificationReadApi(id); await load(); }
+    catch (e) { setError(e instanceof Error ? e.message : "Mark failed"); }
+    finally { setActing(null); }
   };
 
-  const filteredAlerts = alerts.filter((a) => filterLevel === "All" || a.level === filterLevel);
+  const markAll = async () => {
+    setActing(-1);
+    try { await markAllNotificationsReadApi(); await load(); }
+    catch (e) { setError(e instanceof Error ? e.message : "Mark all failed"); }
+    finally { setActing(null); }
+  };
+
+  const items = page?.items ?? [];
+  const unread = items.filter(n => !n.read).length;
 
   return (
     <div className="space-y-6">
-      {/* Top Header */}
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
-          <h2 className="font-display text-2xl font-bold tracking-tight">Real-Time Safety Alerts</h2>
-          <p className="text-sm text-muted-foreground">
-            Configure safety threshold alerts, monitor AI hazard detections, and dispatch emergency response teams.
-          </p>
+          <h2 className="font-display text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Bell className="text-primary size-6" /> Notifications & Alerts
+          </h2>
+          <p className="text-sm text-muted-foreground">Live alerts from the backend. Unread: <strong>{unread}</strong></p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={() => setIsThresholdModalOpen(true)} className="gap-2">
-            <Sliders className="size-4" /> Configure Thresholds
-          </Button>
-        </div>
-      </div>
-
-      {/* Filter and Stats Bar */}
-      <div className="flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <Filter className="size-4 text-muted-foreground" />
-          <span className="text-xs font-medium text-muted-foreground">Filter Severity:</span>
-          {["All", "CRITICAL", "HIGH", "MEDIUM", "INFO"].map((lvl) => (
-            <Button
-              key={lvl}
-              size="sm"
-              variant={filterLevel === lvl ? "default" : "ghost"}
-              className="h-7 px-3 text-xs"
-              onClick={() => setFilterLevel(lvl)}
-            >
-              {lvl}
-            </Button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2 text-xs font-semibold text-emerald-600">
-          <Radio className="size-4 animate-pulse" /> AI Detection Pipeline: Active
+        <div className="flex gap-2">
+          <select value={filter} onChange={e => setFilter(e.target.value)} className="rounded-md border bg-background px-3 py-2 text-sm">
+            <option value="">All</option>
+            <option value="true">Unread only</option>
+          </select>
+          <Button variant="outline" size="sm" onClick={markAll} disabled={acting === -1 || unread === 0} className="gap-1"><CheckCheck className="size-4" /> Mark all read</Button>
+          <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-1"><RefreshCw className="size-4" /> Refresh</Button>
         </div>
       </div>
 
-      {/* Alerts Feed List */}
-      <div className="grid gap-4">
-        {filteredAlerts.map((alt) => (
-          <div key={alt.id} className={cn("dashboard-card p-5 transition-all border-l-4", `border-l-[var(--${alt.tone === 'critical' ? 'destructive' : alt.tone === 'high' ? 'warning' : 'primary'})]`)}>
-            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-bold text-muted-foreground">{alt.id}</span>
-                  <span className={cn("status-badge", `status-${alt.tone}`)}>{alt.level}</span>
-                  <span className="text-xs text-muted-foreground">· {alt.time}</span>
-                </div>
-                <h3 className="font-display text-base font-bold mt-1">{alt.message}</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">{alt.mine} — Source: {alt.sensor}</p>
-              </div>
+      {error && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive flex justify-between items-center">{error}<Button variant="outline" size="sm" onClick={load}>Retry</Button></div>}
 
-              <div className="flex items-center gap-2">
-                {alt.status === "Unacknowledged" ? (
-                  <Button size="sm" variant="default" className="gap-1 text-xs" onClick={() => handleAcknowledge(alt.id)}>
-                    <Check className="size-3" /> Acknowledge
-                  </Button>
-                ) : (
-                  <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20 px-2.5 py-1 rounded-md">
-                    <CheckCircle2 className="size-3" /> {alt.status}
-                  </span>
-                )}
-                <Button size="sm" variant="outline" className="text-xs">
-                  Inspect Sensor
-                </Button>
-              </div>
-            </div>
+      <div className="space-y-3">
+        {loading && <p className="text-muted-foreground text-sm">Loading notifications…</p>}
+        {!loading && items.length === 0 && (
+          <div className="rounded-xl border p-12 text-center text-muted-foreground">
+            <BellOff className="size-10 mx-auto mb-3 opacity-30" />
+            <p>No notifications in this scope.</p>
           </div>
+        )}
+        {items.map(n => (
+          <article key={fmt(n.id)} className={`dashboard-card flex items-start gap-4 p-4 border ${levelClass[fmt(n.level)] ?? levelClass.info} ${!n.read ? "ring-1 ring-primary/20" : "opacity-70"}`}>
+            <span className="text-2xl shrink-0">{kindIcon[fmt(n.kind)] ?? "🔔"}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <strong className="text-sm">{fmt(n.title)}</strong>
+                <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full ${levelClass[fmt(n.level)] ?? levelClass.info}`}>{fmt(n.level)}</span>
+                {!n.read && <span className="size-2 rounded-full bg-primary shrink-0" />}
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">{fmt(n.body)}</p>
+              <p className="text-[11px] text-muted-foreground mt-1">{ist(n.created_at)}</p>
+            </div>
+            {!n.read && (
+              <Button size="sm" variant="outline" disabled={acting === Number(n.id)} onClick={() => void markOne(Number(n.id))} className="shrink-0 text-xs">
+                {acting === Number(n.id) ? "…" : "Mark read"}
+              </Button>
+            )}
+          </article>
         ))}
       </div>
 
-      {/* Configure Thresholds Modal */}
-      {isThresholdModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="dashboard-card w-full max-w-md bg-card p-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="font-display text-lg font-bold">Configure Alert Triggers</h3>
-              <Button variant="ghost" size="icon" onClick={() => setIsThresholdModalOpen(false)}>
-                <X className="size-4" />
-              </Button>
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                alert("Alert threshold parameters saved!");
-                setIsThresholdModalOpen(false);
-              }}
-              className="mt-4 space-y-4"
-            >
-              <div>
-                <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                  Methane (CH4) Warning Trigger Limit
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    step="0.05"
-                    defaultValue="0.75"
-                    className="w-full rounded-md border bg-background p-2 text-sm outline-none focus:border-primary"
-                  />
-                  <span className="text-xs font-semibold text-muted-foreground">% Vol</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                  InSAR Slope Micro-Displacement Limit
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    step="0.5"
-                    defaultValue="4.0"
-                    className="w-full rounded-md border bg-background p-2 text-sm outline-none focus:border-primary"
-                  />
-                  <span className="text-xs font-semibold text-muted-foreground">mm/hr</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                  Dust PM10 Airborne Concentration Limit
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    defaultValue="300"
-                    className="w-full rounded-md border bg-background p-2 text-sm outline-none focus:border-primary"
-                  />
-                  <span className="text-xs font-semibold text-muted-foreground">µg/m³</span>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 border-t pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsThresholdModalOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">Save Threshold Settings</Button>
-              </div>
-            </form>
-          </div>
+      {page && page.total > (page.page_size ?? page.size ?? 20) && (
+        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <span>Showing {items.length} of {page.total}</span>
         </div>
       )}
     </div>

@@ -507,3 +507,45 @@ keep passing with or without your code).
    no longer reshuffles workers, attendance, etc. All counts in this file were **re-measured** after this change
    (e.g. Kusunda: 9 open overdue CAPAs, 54 overdue tasks, compliance ~54%; monsoon 17 vs 2 incidents).
 7. The generator now only fills the 12 sample mines; real mines added by admins never get sample activity.
+
+---
+
+### Update: the ML now trains and predicts on the database ✅
+The first merge read fixed CSV files in `backend/ai_data/`, so `/ai/anomalies` and `/ai/recurrence` gave the same
+answer on every call and showed made-up mines ("Eastern UG"). Those CSVs are removed from `backend/`; everything
+below reads PostgreSQL at request time and is limited to the caller's mines (`org_id`, `mine_id` also accepted).
+
+| Endpoint | Data | Method |
+|---|---|---|
+| `GET /ai/risk` | features from `compliance_tasks, capas, observations, findings, evidence, attendance, workers` (`app/ai/features.py`) | XGBoost, trained on the database: one row per mine per past day, label = at least one incident in the next **14 days**. Reasons = per-mine SHAP values. |
+| `POST /ai/risk/retrain` | same | re-train now (CIL / subsidiary admin). Also runs in the nightly job, at startup (background) and when the model is older than `RISK_RETRAIN_HOURS` (default 6). |
+| `GET /ai/anomalies?days=30&category=` | `production_logs`, `attendance`, `env_readings` | IsolationForest on the produced-minus-dispatched gap; robust (MAD) spikes for attendance per contractor and PM10 (plus every day above 100 µg/m³). Only flagged days are returned. |
+| `GET /ai/recurrence?days=60` | `findings` | TF-IDF + agglomerative clustering per category; 3+ similar findings = recurring. Returns `finding_ids`, `by_mine`, `first_seen`, `last_seen`. |
+
+- Current sample data: 1812 mine-days, 214 followed by an incident, hold-out AUC 0.677 (last 20 % of days).
+  The 7-day "incident or critical finding" label was tried first and scored 0.47 (no better than chance), so it
+  was not used.
+- `/ai/risk` returns `model` (when and on what it was trained), `generated_at`, and per mine `features` +
+  `features_as_of`, so anyone can see the prediction is fresh.
+- Too little history (a new deployment) → `/ai/risk` answers `503` with the reason; the map and dashboards then
+  show a rule score marked `source: "rule_score"` with `ml_status`. Nothing is labelled ML unless it is.
+- The model file (`app/ai/models/risk_db.joblib`) is built from the database and git-ignored; it re-trains itself
+  when pointed at a different database.
+- Tests: `tests/test_zz_ai_live.py` adds incidents, findings and a production log and checks the next answers change.
+- Still to build (optional plug-ins, not connected yet): `obligation_engine.recommend_obligations`,
+  `photo_check.verify_hazard_gone`, voice, and an LLM for Ask Netra (it is a database keyword search today).
+
+### Update: the obligation engine exists (`app/ai/obligation_engine.py`) ✅
+- **Law ingestion:** `python -m app.ai.ingest_regulations "<pdf>"` parses the regulation PDF into
+  `app/ai/data/cmr2017.json` (257 regulations of the Coal Mines Regulations 2017, with page numbers). Done once;
+  the engine only reads the JSON.
+- **`recommend_obligations(profile)`** (0.6 s):
+  1. Catalogue duties whose legal conditions fit the profile. Each CMR duty is matched to its regulation with
+     TF-IDF cosine similarity; the regulation is cited only when it is clearly the best match (≥ 0.08 and 0.02
+     ahead of the next). E.g. SAF-PUMP-W → Reg 150 "Danger from underground inundation".
+  2. Recurring duties read from the law ("shall be examined once at least in every seven days"), scope read from
+     the text (underground / open-cast / explosives / conveyors / surface water), added as `CMR-<reg>-<sub>` when
+     they fit the mine and no catalogue duty already covers that regulation. Current sample profiles: an
+     underground mine gets 19 such duties (Moonidih UG), an open-cast one 2 (Kusunda OCP).
+- Curated catalogue rows are never rewritten by the engine (only `ml_engine` rows are updated).
+- Not LLM-based: no API key is needed. `regulatory_ingest.py` (LLM extraction) is still available for later.

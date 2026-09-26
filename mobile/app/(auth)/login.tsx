@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { useAuthStore, DEMO_USERS } from '../../src/store/auth';
+import { useAuthStore, DEMO_LOGINS, DEMO_PASSWORD } from '../../src/store/auth';
 import { loginApi } from '../../src/api/endpoints';
 import { BigButton } from '../../src/components/BigButton';
 import { colors } from '../../src/theme/colors';
@@ -10,15 +10,19 @@ import { colors } from '../../src/theme/colors';
 export default function LoginScreen() {
   const router = useRouter();
   const { login } = useAuthStore();
-  const [phone, setPhone] = useState('9876543210');
-  const [password, setPassword] = useState('demo123');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async () => {
+  const doLogin = async (loginPhone: string, loginPassword: string) => {
+    if (!loginPhone.trim() || !loginPassword) {
+      Alert.alert('Login Error', 'Enter your phone number and password.');
+      return;
+    }
     setLoading(true);
     try {
-      const res = await loginApi(phone, password);
+      const res = await loginApi(loginPhone, loginPassword);
       login(res.user, res.access_token);
       router.replace('/(tabs)/home' as any);
     } catch (e: any) {
@@ -28,10 +32,12 @@ export default function LoginScreen() {
     }
   };
 
-  const quickLoginRole = (roleKey: keyof typeof DEMO_USERS) => {
-    const user = DEMO_USERS[roleKey];
-    login(user, 'mock-jwt-token');
-    router.replace('/(tabs)/home' as any);
+  const handleLogin = () => doLogin(phone, password);
+
+  const quickLoginRole = (roleKey: keyof typeof DEMO_LOGINS) => {
+    setPhone(DEMO_LOGINS[roleKey]);
+    setPassword(DEMO_PASSWORD);
+    doLogin(DEMO_LOGINS[roleKey], DEMO_PASSWORD);
   };
 
   return (

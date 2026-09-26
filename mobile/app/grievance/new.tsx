@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { BigButton } from '../../src/components/BigButton';
 import { submitGrievanceApi } from '../../src/api/endpoints';
+import { useAuthStore } from '../../src/store/auth';
 import { colors } from '../../src/theme/colors';
 
 const CATEGORIES = [
@@ -14,6 +15,14 @@ const CATEGORIES = [
   'Leave & Shifts',
   'Other Issue',
 ];
+const CATEGORY_KEYS: Record<string, string> = {
+  'Wages / Payment': 'wages',
+  'Safety & PPE': 'safety',
+  Harassment: 'harassment',
+  'Facilities (Water/Toilet/Canteen)': 'facilities',
+  'Leave & Shifts': 'leave',
+  'Other Issue': 'other',
+};
 
 export default function NewGrievanceScreen() {
   const router = useRouter();
@@ -22,17 +31,26 @@ export default function NewGrievanceScreen() {
   const [anonymous, setAnonymous] = useState(true);
   const [loading, setLoading] = useState(false);
   const [tokenResult, setTokenResult] = useState<string | null>(null);
+  const { selectedLanguage } = useAuthStore();
 
   const handleSubmit = async () => {
-    if (!text) {
-      Alert.alert('Required', 'Please enter your grievance details.');
+    if (text.trim().length < 5) {
+      Alert.alert('Required', 'Please enter your grievance details (at least 5 characters).');
       return;
     }
 
     setLoading(true);
     try {
-      const res = await submitGrievanceApi(selectedCat, text, anonymous);
-      setTokenResult(res.token);
+      const res = await submitGrievanceApi(CATEGORY_KEYS[selectedCat] || 'other', text.trim(), anonymous, selectedLanguage);
+      if (res.queued || !res.data) {
+        Alert.alert(
+          'Saved Offline',
+          'No network. Your grievance is in the outbox; you will get the tracking token once it syncs (see My Reports).'
+        );
+        router.back();
+        return;
+      }
+      setTokenResult(res.data.token);
     } catch (e: any) {
       Alert.alert('Error', e.message);
     } finally {

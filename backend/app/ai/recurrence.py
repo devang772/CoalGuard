@@ -1,322 +1,93 @@
-from pathlib import Path
+"""Recurring violations: the same problem found again and again, from the live `findings` table.
+
+Findings of the caller's mines from the last `days` days are grouped by category, turned into TF-IDF vectors and
+clustered (agglomerative, cosine distance). A cluster with 3 or more findings is a recurring violation.
+"""
+from __future__ import annotations
+
 import re
+from datetime import timedelta
 
 import numpy as np
 import pandas as pd
-
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import AgglomerativeClustering
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models import Finding, OrgUnit
+from app.utils import utcnow
+
+MIN_REPEATS = 3
+DISTANCE_THRESHOLD = 0.8
 
 
-BASE_DIR = Path(__file__).resolve().parents[2]
-
-DATA_FILE = (
-    BASE_DIR
-    / "ai_data"
-    / "findings.csv"
-)
+def clean_text(text: str) -> str:
+    text = re.sub(r"\d+", " ", str(text).lower())
+    text = re.sub(r"[^a-z\s]", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
-# ============================================================
-# TEXT CLEANING
-# ============================================================
-
-def clean_text(text):
-
-    text = str(text).lower()
-
-    # Remove numbers
-    text = re.sub(
-        r"\d+",
-        " ",
-        text,
-    )
-
-    # Remove punctuation
-    text = re.sub(
-        r"[^a-z\s]",
-        " ",
-        text,
-    )
-
-    # Remove extra spaces
-    text = re.sub(
-        r"\s+",
-        " ",
-        text,
-    )
-
-    return text.strip()
+def _describe(vectorizer: TfidfVectorizer, matrix, indices: list[int], texts: list[str]) -> tuple[str, list[str]]:
+    """Label = the finding closest to the cluster centre (a real sentence); keywords = its strongest single words."""
+    rows = matrix[indices]
+    centre = np.asarray(rows.mean(axis=0)).ravel()
+    closest = int(np.argmax(rows @ centre))
+    words = vectorizer.get_feature_names_out()
+    keywords = [words[i] for i in centre.argsort()[::-1] if " " not in words[i]][:4]
+    return texts[closest], keywords
 
 
-# ============================================================
-# GENERATE CLUSTER LABEL
-# ============================================================
-
-def make_label(
-    vectorizer,
-    matrix,
-    indices,
-):
-
-    cluster_matrix = (
-        matrix[
-            indices
-        ].mean(axis=0)
-    )
-
-    scores = np.asarray(
-        cluster_matrix
-    ).ravel()
-
-    feature_names = (
-        vectorizer.get_feature_names_out()
-    )
-
-    top_indices = scores.argsort()[
-        ::-1
-    ][:4]
-
-    words = [
-        feature_names[i]
-        for i in top_indices
-    ]
-
-    return " ".join(words)
-
-
-# ============================================================
-# MAIN FUNCTION
-# ============================================================
-
-def detect_recurring_violations(
-    days=60,
-):
-
-    df = pd.read_csv(
-        DATA_FILE
-    )
-
-    df["created_at"] = pd.to_datetime(
-        df["created_at"]
-    )
-
-    # --------------------------------------------------------
-    # Last N days
-    # --------------------------------------------------------
-
-    latest_date = df[
-        "created_at"
-    ].max()
-
-    cutoff = (
-        latest_date
-        - pd.Timedelta(days=days)
-    )
-
-    df = df[
-        df["created_at"] >= cutoff
-    ].copy()
-
-    # --------------------------------------------------------
-    # Clean text
-    # --------------------------------------------------------
-
-    df["clean_text"] = (
-        df["description"]
-        .apply(clean_text)
-    )
-
+def detect_recurring_violations(db: Session, mine_ids: list[int], days: int = 60) -> list[dict]:
+    if not mine_ids:
+        return []
+    rows = db.execute(select(Finding.id, Finding.mine_id, OrgUnit.name, Finding.category, Finding.severity,
+                             Finding.description, Finding.created_at)
+                      .join(OrgUnit, OrgUnit.id == Finding.mine_id)
+                      .where(Finding.mine_id.in_(mine_ids), Finding.created_at >= utcnow() - timedelta(days=days),
+                             Finding.created_at <= utcnow())
+                      .order_by(Finding.created_at)).all()
+    df = pd.DataFrame(rows, columns=["id", "mine_id", "mine_name", "category", "severity", "description",
+                                     "created_at"])
+    if df.empty:
+        return []
+    df["created_at"] = pd.to_datetime(df["created_at"], utc=True)
+    df["clean"] = df["description"].map(clean_text)
     results = []
-
-    cluster_counter = 1
-
-    # --------------------------------------------------------
-    # Cluster within category.
-    #
-    # This is important because "electrical failure"
-    # and "coal spillage" should not be grouped together.
-    # --------------------------------------------------------
-
-    for category, group in df.groupby(
-        "category"
-    ):
-
-        group = group.reset_index(
-            drop=True
-        )
-
-        if len(group) < 3:
+    for category, group in df.groupby("category"):
+        group = group[group["clean"] != ""].reset_index(drop=True)
+        if len(group) < MIN_REPEATS:
             continue
-
-        vectorizer = TfidfVectorizer(
-            ngram_range=(1, 2),
-            min_df=1,
-            stop_words="english",
-        )
-
-        matrix = vectorizer.fit_transform(
-            group["clean_text"]
-        )
-
-        if matrix.shape[0] < 3:
-            continue
-
-        # ----------------------------------------------------
-        # Clustering
-        # ----------------------------------------------------
-
+        vectorizer = TfidfVectorizer(ngram_range=(1, 2), stop_words="english")
         try:
-
-            model = AgglomerativeClustering(
-                metric="cosine",
-                linkage="average",
-                distance_threshold=0.8,
-                n_clusters=None,
-            )
-
-        except TypeError:
-
-            # Older sklearn
-            model = AgglomerativeClustering(
-                affinity="cosine",
-                linkage="average",
-                distance_threshold=0.6,
-                n_clusters=None,
-            )
-
-        labels = model.fit_predict(
-            matrix.toarray()
-        )
-
+            matrix = vectorizer.fit_transform(group["clean"])
+        except ValueError:          # only stop words
+            continue
+        labels = AgglomerativeClustering(metric="cosine", linkage="average", n_clusters=None,
+                                         distance_threshold=DISTANCE_THRESHOLD).fit_predict(matrix.toarray())
         group["cluster"] = labels
-
-        # ----------------------------------------------------
-        # Create result for every cluster
-        # ----------------------------------------------------
-
-        for cluster_id in sorted(
-            group["cluster"].unique()
-        ):
-
-            cluster = group[
-                group["cluster"]
-                == cluster_id
-            ]
-
-            count = len(cluster)
-
-            if count < 3:
+        for _, cluster in group.groupby("cluster"):
+            if len(cluster) < MIN_REPEATS:
                 continue
-
-            indices = cluster.index.tolist()
-
-            label = make_label(
-                vectorizer,
-                matrix,
-                indices,
-            )
-
-            first_date = cluster[
-                "created_at"
-            ].min()
-
-            last_date = cluster[
-                "created_at"
-            ].max()
-
-            days_span = (
-                last_date
-                - first_date
-            ).days
-
-            results.append(
-                {
-                    "cluster_id":
-                        cluster_counter,
-
-                    "label":
-                        label,
-
-                    "count":
-                        count,
-
-                    "days_span":
-                        days_span,
-
-                    "mines":
-                        sorted(
-                            cluster[
-                                "mine_name"
-                            ].unique()
-                            .tolist()
-                        ),
-
-                    "sample_findings":
-                        cluster[
-                            "description"
-                        ]
-                        .head(3)
-                        .tolist(),
-                }
-            )
-
-            cluster_counter += 1
-
-    results.sort(
-        key=lambda x: x["count"],
-        reverse=True,
-    )
-
+            first, last = cluster["created_at"].min(), cluster["created_at"].max()
+            by_mine = cluster.groupby(["mine_id", "mine_name"]).size().sort_values(ascending=False)
+            label, keywords = _describe(vectorizer, matrix, cluster.index.tolist(), cluster["description"].tolist())
+            results.append({
+                "label": label,
+                "keywords": keywords,
+                "category": category,
+                "count": int(len(cluster)),
+                "days_span": int((last - first).days),
+                "first_seen": first.isoformat(),
+                "last_seen": last.isoformat(),
+                "mines": [name for (_, name) in by_mine.index],
+                "by_mine": [{"mine_id": int(mid), "mine_name": name, "count": int(n)}
+                            for (mid, name), n in by_mine.items()],
+                "severities": {k: int(v) for k, v in cluster["severity"].value_counts().items()},
+                "finding_ids": [int(i) for i in cluster["id"]],
+                "sample_findings": cluster["description"].tail(3).tolist(),
+            })
+    results.sort(key=lambda item: (item["count"], item["last_seen"]), reverse=True)
+    for number, item in enumerate(results, start=1):
+        item["cluster_id"] = number
     return results
-
-
-# ============================================================
-# RUN
-# ============================================================
-
-if __name__ == "__main__":
-
-    results = detect_recurring_violations()
-
-    print(
-        f"\nFound {len(results)} recurring "
-        f"violation groups.\n"
-    )
-
-    for item in results:
-
-        print(
-            f"{item['label']}"
-        )
-
-        print(
-            f"Occurrences: "
-            f"{item['count']}"
-        )
-
-        print(
-            f"Time span: "
-            f"{item['days_span']} days"
-        )
-
-        print(
-            f"Mines: "
-            f"{', '.join(item['mines'])}"
-        )
-
-        print(
-            "Examples:"
-        )
-
-        for finding in item[
-            "sample_findings"
-        ]:
-
-            print(
-                f"  - {finding}"
-            )
-
-        print(
-            "-" * 60
-        )

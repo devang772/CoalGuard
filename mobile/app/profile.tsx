@@ -1,10 +1,16 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useAuthStore } from '../src/store/auth';
+import { getAppDeviceInfo } from '../src/lib/deviceInfo';
 import { colors } from '../src/theme/colors';
 
 export default function ProfileScreen() {
   const { user } = useAuthStore();
+  const [deviceId, setDeviceId] = useState('…');
+
+  useEffect(() => {
+    getAppDeviceInfo().then((d) => setDeviceId(d.deviceId));
+  }, []);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -16,13 +22,16 @@ export default function ProfileScreen() {
         <Text style={styles.val}>{user?.phone}</Text>
 
         <Text style={styles.label}>Role / Designation</Text>
-        <Text style={styles.val}>{user?.role?.toUpperCase().replace('_', ' ')}</Text>
+        <Text style={styles.val}>{user?.role?.toUpperCase().replace(/_/g, ' ')}</Text>
 
         <Text style={styles.label}>Assigned Mine Unit</Text>
-        <Text style={styles.val}>{user?.mine_name} (BCCL)</Text>
+        <Text style={styles.val}>
+          {user?.mine_name || user?.org_name || '—'}
+          {user?.org_type && user.org_type !== 'mine' ? ` (${user.org_type.toUpperCase()})` : ''}
+        </Text>
 
         <Text style={styles.label}>Hardware Device ID (Satya Proof)</Text>
-        <Text style={styles.val}>DEV-ANDROID-NETRA-01</Text>
+        <Text style={styles.val}>{deviceId}</Text>
       </View>
     </ScrollView>
   );

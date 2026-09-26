@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     scheduler_enabled: bool = True
     # Demo mode: 60 means 1 real minute counts as 1 hour for reminders/escalations (1 = real time)
     demo_time_speed: float = 1.0
+    # Demo mode: let a worker mark attendance many times a day (every mark is saved and shown).
+    # Set to false for the real rule: one valid attendance per worker per day.
+    attendance_allow_multiple: bool = True
 
     # How long to wait for the ML engine before using the fallback matcher
     ml_timeout_seconds: float = 20.0

@@ -111,16 +111,27 @@ mobile/
 
 ## ⚙️ Environment Variables & API Configuration
 
-The mobile app connects to the same backend API (`backend/`) as the web application.
+The mobile app uses **only the real backend API** (`backend/`), the same one as the web application. There is no mock data:
+every screen needs the backend running (see `backend/docs/FOR_FRONTEND_TEAM.md`, section 0) and a valid login.
 
-Configure your local machine IP address in `EXPO_PUBLIC_API_URL`:
+- **Login required:** every screen except language / permissions / login is blocked until the user logs in with a real
+  account (demo accounts: `9000000007` safety officer, `9000000004` mine manager, `9000000009` worker,
+  `9000000006` contractor admin; password `demo123`). The session is saved on the phone; an expired or invalid token
+  sends the user back to login.
+- **Backend address:** with Expo Go the app automatically uses the laptop running Metro (`http://<laptop IP>:8000`).
+  To override it, set `EXPO_PUBLIC_API_URL`:
 
 ```env
 # In mobile/.env or mobile/.env.local:
-EXPO_PUBLIC_API_URL=http://192.168.1.100:8000/api/v1
+EXPO_PUBLIC_API_URL=http://192.168.1.100:8000
 ```
 
-> **Note**: When running on physical mobile devices via Expo Go, replace `localhost` with your computer's local Wi-Fi IP address (e.g. `192.168.x.x`).
+- **Location:** real device GPS by default. Settings → "SIH demo simulation tools" can override it for a demo
+  (INSIDE / OUTSIDE the mine boundary from the backend, or MOCK GPS); tap the selected button again to go back to real GPS.
+- **Offline:** when the server can't be reached, reports, task completions, CAPA closures, attendance, findings, SOS and
+  grievances go to the outbox and are sent through `POST /sync/bulk` when the phone is back online.
+- **Voice reports** are recorded for real and sent to `POST /ai/voice`. Until the ML team adds that endpoint, the app
+  asks the user to type the report in the same confirmation form.
 
 ---
 

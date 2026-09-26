@@ -1,521 +1,490 @@
 import { Platform } from 'react-native';
-import { MOCK_TASKS, MOCK_CHECKLISTS, MOCK_CAPAS, MOCK_NOTIFICATIONS, MOCK_WORKERS } from './mock/data';
-import { TaskItem, CAPAItem, VoiceReportResult, User, AttendanceRecord, GrievanceItem, NotificationItem } from './types';
-import { MOONIDIH_MINE_POLYGON, isPointInPolygon, getDistanceMeters } from '../lib/geo';
-import { enqueueOutboxItem } from '../offline/outbox';
-import { apiFetch } from './client';
+import {
+  TaskItem,
+  TaskSummary,
+  CAPAItem,
+  ClosureCheck,
+  VoiceReportResult,
+  User,
+  AttendanceRecord,
+  GrievanceItem,
+  NotificationItem,
+  EvidenceInfo,
+  MyReportItem,
+  MapPin,
+  InspectionDetail,
+  SubmitResult,
+} from './types';
+import { apiFetch, ApiError, fileUrl, isNetworkError } from './client';
+import { enqueueOutboxItem, OutboxEvidence, OutboxItem } from '../offline/outbox';
+import { useSettingsStore, CaptureMeta } from '../store/settings';
+import { useSyncStore } from '../store/sync';
+import { getActiveMineId } from '../store/master';
+import { getAppDeviceInfo } from '../lib/deviceInfo';
 
-const simulateDelay = (ms = 500) => new Promise((resolve) => setTimeout(resolve, ms));
+// ---------------------------------------------------------------- helpers
 
-export async function checkHealthApi(): Promise<{ status: string; database: string }> {
-  return await apiFetch<{ status: string; database: string }>('/health', { timeoutMs: 3000 });
+export function newClientUuid(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export async function loginApi(phone: string, password: string): Promise<{ access_token: string; user: User }> {
-  try {
-    const res = await apiFetch<{
-      access_token: string;
-      token_type: string;
-      user: {
-        id: number | string;
-        name: string;
-        phone: string;
-        role: any;
-        language?: string;
-        org_unit_id: number | string;
-        org_name?: string;
-        org_type?: string;
-        mine_id: number | string | null;
-        mine_name: string | null;
-      };
-    }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ phone, password }),
-      timeoutMs: 4000,
-    });
-
-    const user: User = {
-      id: String(res.user.id),
-      name: res.user.name,
-      phone: res.user.phone,
-      role: res.user.role,
-      org_unit_id: String(res.user.org_unit_id),
-      mine_id: res.user.mine_id ? String(res.user.mine_id) : null,
-      mine_name: res.user.mine_name || null,
-      language: res.user.language || 'hi',
-    };
-
-    return {
-      access_token: res.access_token,
-      user,
-    };
-  } catch (error: any) {
-    console.warn('[loginApi] Backend call failed, using mock auth fallback:', error.message);
-    await simulateDelay(400);
-
-    const user: User = {
-      id: 'usr-001',
-      name: 'Ramesh Sharma',
-      phone,
-      role: 'safety_officer',
-      org_unit_id: 'org-jh1',
-      mine_id: 'mine-moonidih',
-      mine_name: 'Moonidih UG',
-      language: 'hi',
-    };
-
-    return {
-      access_token: 'jwt-token-netra-demo-2026',
-      user,
-    };
-  }
-}
-
-export async function fetchMeApi(token: string): Promise<User> {
-  const res = await apiFetch<any>('/auth/me', { token });
+function toUser(u: any): User {
   return {
-    id: String(res.id),
-    name: res.name,
-    phone: res.phone,
-    role: res.role,
-    org_unit_id: String(res.org_unit_id),
-    mine_id: res.mine_id ? String(res.mine_id) : null,
-    mine_name: res.mine_name || null,
-    language: res.language || 'hi',
+    id: String(u.id),
+    name: u.name,
+    phone: u.phone,
+    role: u.role,
+    org_unit_id: String(u.org_unit_id),
+    org_name: u.org_name ?? null,
+    org_type: u.org_type ?? null,
+    mine_id: u.mine_id != null ? String(u.mine_id) : null,
+    mine_name: u.mine_name ?? null,
+    language: u.language || 'hi',
   };
 }
 
-export async function uploadEvidenceApi(
-  fileUri: string,
-  mineId: number = 1,
-  lat: number = 23.7505,
-  lng: number = 86.4205,
-  isMocked: boolean = false,
-  clientUuid?: string
-): Promise<{ id: number; trust_score?: number } | null> {
-  try {
-    const formData = new FormData();
-
-    if (Platform.OS === 'web' && fileUri.startsWith('data:')) {
-      const fetchRes = await fetch(fileUri);
-      const blob = await fetchRes.blob();
-      formData.append('file', blob, 'photo.jpg');
-    } else {
-      formData.append('file', {
-        uri: fileUri,
-        name: 'photo.jpg',
-        type: 'image/jpeg',
-      } as any);
-    }
-
-    formData.append('mine_id', String(mineId));
-    formData.append('lat', String(lat));
-    formData.append('lng', String(lng));
-    formData.append('is_mocked', String(isMocked));
-    if (clientUuid) formData.append('client_uuid', clientUuid);
-
-    const res = await apiFetch<any>('/evidence', {
-      method: 'POST',
-      body: formData,
-      timeoutMs: 10000,
-    });
-
-    return { id: res.id, trust_score: res.trust_score };
-  } catch (err: any) {
-    console.warn('[uploadEvidenceApi] Photo evidence upload error:', err.message);
-    return null;
-  }
+function toEvidence(e: any): EvidenceInfo | null {
+  if (!e) return null;
+  return {
+    id: e.id,
+    url: fileUrl(e.url),
+    lat: e.lat ?? null,
+    lng: e.lng ?? null,
+    trust_score: e.trust_score ?? null,
+    trust_level: e.trust_level ?? null,
+    flags: e.flags || [],
+  };
 }
 
-export async function fetchMasterSyncApi() {
-  try {
-    const data = await apiFetch<any>('/sync/master', { timeoutMs: 5000 });
-    return {
-      mines: (data.mines || []).map((m: any) => ({
-        id: String(m.id),
-        name: m.name,
-        boundary: m.boundary || MOONIDIH_MINE_POLYGON,
-        center: { lat: m.center_lat || 23.7500, lng: m.center_lng || 86.4200 },
-      })),
-      checklists: data.checklists || MOCK_CHECKLISTS,
-      workers: data.workers || MOCK_WORKERS,
-      server_time: data.server_time || new Date().toISOString(),
-    };
-  } catch (err: any) {
-    console.warn('[fetchMasterSyncApi] Using fallback sync pack:', err.message);
-    return {
-      mines: [
-        {
-          id: 'mine-moonidih',
-          name: 'Moonidih UG',
-          boundary: MOONIDIH_MINE_POLYGON,
-          center: { lat: 23.7500, lng: 86.4200 },
-        },
-      ],
-      checklists: MOCK_CHECKLISTS,
-      workers: MOCK_WORKERS,
-      server_time: new Date().toISOString(),
-    };
-  }
+function escalationLabel(level: number): 'L0' | 'L1' | 'L2' | 'L3' {
+  return (['L0', 'L1', 'L2', 'L3'][Math.max(0, Math.min(3, level || 0))] as any);
 }
 
-export async function fetchTasksApi(): Promise<TaskItem[]> {
-  try {
-    const res = await apiFetch<{ items: any[] }>('/tasks', { timeoutMs: 5000 });
-    if (res && res.items && res.items.length > 0) {
-      return res.items.map((t: any) => ({
-        id: String(t.id),
-        obligation: {
-          id: String(t.obligation.id),
-          title: t.obligation.title,
-          law_ref: t.obligation.law_ref,
-          category: t.obligation.category,
-          evidence_needed: t.obligation.evidence_needed || 'photo',
-        },
-        due_date: t.due_date,
-        status: t.status as 'pending' | 'done' | 'overdue',
-        escalation_level: (t.escalation_level === 0 ? 'L0' : t.escalation_level === 1 ? 'L1' : 'L2') as any,
-        completed_at: t.done_at || undefined,
-        evidence_id: t.evidence_id ? String(t.evidence_id) : undefined,
-        remarks: t.remarks || undefined,
-        trust_score: t.evidence?.trust_score || 92,
-      }));
-    }
-  } catch (err: any) {
-    console.warn('[fetchTasksApi] Error fetching live tasks:', err.message);
-  }
-  return MOCK_TASKS;
+function requireMineId(): number {
+  const mineId = getActiveMineId();
+  if (!mineId) throw new ApiError('No mine is linked to your account.', 400);
+  return mineId;
 }
 
-export async function completeTaskApi(taskId: string, evidenceUriOrId: string, remarks: string) {
-  const clientUuid = `task-complete-${Date.now()}`;
-  try {
-    let evidenceId: number | null = null;
-    if (/^\d+$/.test(evidenceUriOrId)) {
-      evidenceId = parseInt(evidenceUriOrId, 10);
-    } else if (evidenceUriOrId && evidenceUriOrId.length > 5) {
-      const uploaded = await uploadEvidenceApi(evidenceUriOrId, 1, 23.7505, 86.4205);
-      if (uploaded?.id) evidenceId = uploaded.id;
-    }
+function isForcedOffline(): boolean {
+  return useSettingsStore.getState().forceOffline || !useSyncStore.getState().isOnline;
+}
 
-    const numId = parseInt(taskId, 10);
-    if (!isNaN(numId)) {
-      const res = await apiFetch<any>(`/tasks/${numId}/complete`, {
-        method: 'POST',
-        body: JSON.stringify({
-          evidence_id: evidenceId,
-          remarks,
-          client_uuid: clientUuid,
-        }),
-        timeoutMs: 5000,
-      });
-      return { success: true, trust_score: res.evidence?.trust_score || 92, flags: [] };
-    }
-  } catch (err: any) {
-    console.warn('[completeTaskApi] Live complete failed, using outbox:', err.message);
-  }
+// ---------------------------------------------------------------- auth
 
-  enqueueOutboxItem({
-    client_uuid: clientUuid,
-    kind: 'task_complete',
-    payload: { taskId, evidenceId: evidenceUriOrId, remarks },
-    file_uris: [],
-    priority: 1,
+export async function checkHealthApi(): Promise<{ status: string; database: string }> {
+  return await apiFetch<{ status: string; database: string }>('/health', { timeoutMs: 4000, token: null });
+}
+
+export async function loginApi(phone: string, password: string): Promise<{ access_token: string; user: User }> {
+  const res = await apiFetch<{ access_token: string; token_type: string; user: any }>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ phone: phone.trim(), password }),
+    token: null,
   });
-  return { success: true, trust_score: 92, flags: [] };
+  return { access_token: res.access_token, user: toUser(res.user) };
 }
 
-export async function fetchCapasApi(): Promise<CAPAItem[]> {
-  try {
-    const res = await apiFetch<{ items: any[] }>('/capa', { timeoutMs: 5000 });
-    if (res && res.items && res.items.length > 0) {
-      return res.items.map((c: any) => ({
-        id: String(c.id),
-        finding: {
-          description: c.finding?.description || 'Hazard reported',
-          category: c.finding?.category || 'roof',
-          severity: (c.finding?.severity || 'medium') as any,
-          lat: c.finding?.lat || 23.7505,
-          lng: c.finding?.lng || 86.4205,
-        },
-        before_photo: {
-          url: c.before_photo?.file_url || 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=400',
-          lat: c.finding?.lat || 23.7505,
-          lng: c.finding?.lng || 86.4205,
-        },
-        after_photo: c.after_photo ? {
-          url: c.after_photo.file_url || '',
-          lat: c.finding?.lat || 23.7505,
-          lng: c.finding?.lng || 86.4205,
-        } : undefined,
-        due_at: c.due_at,
-        status: c.status as any,
-        escalation_level: (c.escalation_level === 0 ? 'Assigned' : c.escalation_level === 1 ? 'L1' : 'L2') as any,
-        overdue: Boolean(c.overdue),
-        trust_score: c.closure_score || 86,
-      }));
-    }
-  } catch (err: any) {
-    console.warn('[fetchCapasApi] Live CAPAs error, using fallback:', err.message);
+export async function fetchMeApi(token?: string): Promise<User> {
+  const res = await apiFetch<any>('/auth/me', token !== undefined ? { token } : {});
+  return toUser(res);
+}
+
+// ---------------------------------------------------------------- evidence (Satya Proof)
+
+export interface EvidenceUpload {
+  uri: string;
+  mineId: number;
+  meta: CaptureMeta | null;
+  clientUuid?: string;
+}
+
+/** Uploads a photo taken in the app. Throws on failure (network errors are handled by the callers). */
+export async function uploadEvidenceApi({ uri, mineId, meta, clientUuid }: EvidenceUpload): Promise<EvidenceInfo> {
+  const formData = new FormData();
+
+  if (Platform.OS === 'web') {
+    const blob = await (await fetch(uri)).blob();
+    formData.append('file', blob, 'photo.jpg');
+  } else {
+    formData.append('file', { uri, name: 'photo.jpg', type: 'image/jpeg' } as any);
   }
-  return MOCK_CAPAS;
+
+  const device = await getAppDeviceInfo();
+  formData.append('mine_id', String(mineId));
+  if (meta?.lat != null && meta?.lng != null) {
+    formData.append('lat', String(meta.lat));
+    formData.append('lng', String(meta.lng));
+  }
+  if (meta?.accuracy != null) formData.append('accuracy', String(meta.accuracy));
+  if (meta?.deviceTime) formData.append('device_time', meta.deviceTime);
+  formData.append('device_id', device.deviceId);
+  formData.append('is_mocked', String(Boolean(meta?.isMocked)));
+  if (clientUuid) formData.append('client_uuid', clientUuid);
+
+  const res = await apiFetch<any>('/evidence', { method: 'POST', body: formData, timeoutMs: 60000 });
+  return toEvidence(res)!;
+}
+
+/**
+ * Sends a write to the backend. When the phone is offline (or "force offline" is on) the exact same body is
+ * put in the outbox and sent later through POST /sync/bulk. Server-side refusals (4xx) are thrown as errors.
+ */
+async function submitOrQueue<T>(opts: {
+  kind: OutboxItem['kind'];
+  clientUuid: string;
+  body: Record<string, any>;
+  evidence?: OutboxEvidence | null;
+  priority?: number;
+  send: (body: Record<string, any>) => Promise<T>;
+}): Promise<SubmitResult<T>> {
+  const { kind, clientUuid, body, evidence, priority = 1, send } = opts;
+  const queue = (): SubmitResult<T> => {
+    enqueueOutboxItem({
+      client_uuid: clientUuid,
+      kind,
+      payload: { ...body, ...(evidence ? { _evidence: evidence } : {}) },
+      file_uris: evidence ? [evidence.uri] : [],
+      priority,
+    });
+    return { queued: true };
+  };
+
+  if (isForcedOffline()) return queue();
+
+  try {
+    let finalBody = body;
+    let uploaded: EvidenceInfo | null = null;
+    if (evidence) {
+      uploaded = await uploadEvidenceApi({
+        uri: evidence.uri,
+        mineId: evidence.mine_id,
+        meta: evidence.meta,
+        clientUuid: `${clientUuid}-photo`,
+      });
+      finalBody = { ...body, [evidence.field]: uploaded.id };
+    }
+    const data = await send(finalBody);
+    return { queued: false, data, evidence: uploaded };
+  } catch (err) {
+    if (isNetworkError(err)) return queue();
+    throw err;
+  }
+}
+
+function photoEvidence(field: string, uri: string | null | undefined, meta: CaptureMeta | null | undefined, mineId: number): OutboxEvidence | null {
+  if (!uri) return null;
+  return { field, uri, meta: meta || null, mine_id: mineId };
+}
+
+// ---------------------------------------------------------------- compliance tasks
+
+function toTask(t: any): TaskItem {
+  const evidence = toEvidence(t.evidence);
+  return {
+    id: String(t.id),
+    mine_name: t.mine_name,
+    obligation: {
+      id: String(t.obligation.id),
+      title: t.obligation.title,
+      law_ref: t.obligation.law_ref,
+      category: t.obligation.category,
+      evidence_needed: t.obligation.evidence_needed || 'photo',
+    },
+    due_date: t.due_date,
+    status: t.status,
+    escalation_level: escalationLabel(t.escalation_level),
+    completed_at: t.done_at || undefined,
+    done_by_name: t.done_by_name || undefined,
+    evidence_id: t.evidence_id ? String(t.evidence_id) : undefined,
+    evidence,
+    remarks: t.remarks || undefined,
+    trust_score: evidence?.trust_score ?? undefined,
+    trust_flags: evidence?.flags,
+  };
+}
+
+export type TaskSegment = 'today' | 'week' | 'overdue' | 'done';
+
+export async function fetchTasksApi(segment: TaskSegment, q?: string): Promise<TaskItem[]> {
+  const params = new URLSearchParams({ page_size: '200' });
+  if (segment === 'done') params.set('status', 'done');
+  else params.set('due', segment);
+  if (q && q.trim().length > 0) params.set('q', q.trim());
+  const res = await apiFetch<{ items: any[] }>(`/tasks?${params.toString()}`);
+  const items = (res.items || []).map(toTask);
+  // "Today" / "week" tabs are the work still to do.
+  return segment === 'today' || segment === 'week' ? items.filter((t) => t.status !== 'done') : items;
+}
+
+export async function fetchTaskApi(taskId: string): Promise<TaskItem> {
+  return toTask(await apiFetch<any>(`/tasks/${encodeURIComponent(taskId)}`));
+}
+
+export async function fetchTaskSummaryApi(): Promise<TaskSummary> {
+  return await apiFetch<TaskSummary>('/tasks/summary');
+}
+
+export async function completeTaskApi(
+  taskId: string,
+  photoUri: string | null,
+  meta: CaptureMeta | null,
+  remarks: string
+): Promise<SubmitResult<TaskItem>> {
+  const clientUuid = newClientUuid('task');
+  const mineId = requireMineId();
+  return submitOrQueue({
+    kind: 'task_complete',
+    clientUuid,
+    body: { task_id: Number(taskId), remarks: remarks || null, client_uuid: clientUuid },
+    evidence: photoEvidence('evidence_id', photoUri, meta, mineId),
+    send: async (body) => {
+      const { task_id, ...rest } = body;
+      return toTask(await apiFetch<any>(`/tasks/${task_id}/complete`, { method: 'POST', body: JSON.stringify(rest) }));
+    },
+  });
+}
+
+// ---------------------------------------------------------------- CAPA
+
+function toCapa(c: any): CAPAItem {
+  const before = toEvidence(c.before_photo) || toEvidence(c.finding?.photo);
+  const after = toEvidence(c.after_photo);
+  const level = c.escalation_level || 0;
+  return {
+    id: String(c.id),
+    mine_name: c.mine_name,
+    owner_name: c.owner?.name,
+    finding: {
+      description: c.finding?.description || '',
+      category: c.finding?.category || 'other',
+      severity: c.finding?.severity || 'medium',
+      law_ref: c.finding?.law_ref ?? null,
+      lat: c.finding?.lat ?? null,
+      lng: c.finding?.lng ?? null,
+    },
+    before_photo: {
+      url: before?.url || '',
+      lat: before?.lat ?? c.finding?.lat ?? null,
+      lng: before?.lng ?? c.finding?.lng ?? null,
+    },
+    after_photo: after ? { url: after.url || '', lat: after.lat, lng: after.lng } : undefined,
+    due_at: c.due_at,
+    status: c.status,
+    escalation_level: level === 0 ? 'Assigned' : (escalationLabel(level) as any),
+    escalation_step: level,
+    overdue: Boolean(c.overdue),
+    closure_checks: c.closure_checks || null,
+    trust_score: before?.trust_score ?? undefined,
+    trust_flags: before?.flags,
+  };
+}
+
+export async function fetchCapasApi(status: CAPAItem['status']): Promise<CAPAItem[]> {
+  const res = await apiFetch<{ items: any[] }>(`/capa?status=${status}&page_size=200`);
+  return (res.items || []).map(toCapa);
+}
+
+export async function fetchCapaApi(capaId: string): Promise<CAPAItem> {
+  return toCapa(await apiFetch<any>(`/capa/${encodeURIComponent(capaId)}`));
 }
 
 export async function closeCapaApi(
   capaId: string,
-  afterPhotoMeta: { lat: number; lng: number; uri: string; accuracy: number; isMocked: boolean }
-) {
-  const clientUuid = `capa-close-${Date.now()}`;
-  try {
-    let evidenceId: number | null = null;
-    if (afterPhotoMeta.uri) {
-      const uploaded = await uploadEvidenceApi(
-        afterPhotoMeta.uri,
-        1,
-        afterPhotoMeta.lat,
-        afterPhotoMeta.lng,
-        afterPhotoMeta.isMocked
-      );
-      if (uploaded?.id) evidenceId = uploaded.id;
-    }
-
-    const numId = parseInt(capaId, 10);
-    if (!isNaN(numId)) {
-      const res = await apiFetch<any>(`/capa/${numId}/request-closure`, {
+  afterPhotoUri: string,
+  meta: CaptureMeta | null
+): Promise<SubmitResult<{ passed: boolean; status: string; checks: ClosureCheck[] }>> {
+  const clientUuid = newClientUuid('capa-close');
+  const mineId = requireMineId();
+  return submitOrQueue({
+    kind: 'capa_close',
+    clientUuid,
+    body: { capa_id: Number(capaId), note: 'Rectification completed on ground.' },
+    evidence: photoEvidence('evidence_id', afterPhotoUri, meta, mineId),
+    send: async (body) => {
+      const { capa_id, ...rest } = body;
+      const res = await apiFetch<any>(`/capa/${capa_id}/request-closure`, {
         method: 'POST',
-        body: JSON.stringify({
-          evidence_id: evidenceId,
-          note: 'Rectification completed on ground.',
-          client_uuid: clientUuid,
-        }),
-        timeoutMs: 6000,
+        body: JSON.stringify(rest),
       });
-
-      const passed = res.status !== 'rejected';
       return {
-        passed,
+        passed: res.status === 'in_review' || res.status === 'closed',
         status: res.status,
-        checks: res.closure_checks || [
-          { name: 'Same location check', passed: true, detail: 'Location verified' },
-          { name: 'Satya Proof trust score', passed: true, detail: `Score: ${res.closure_score || 86}` },
-        ],
-        distanceMeters: 12,
+        checks: res.closure_checks || [],
       };
-    }
-  } catch (err: any) {
-    console.warn('[closeCapaApi] Backend request-closure failed, using outbox fallback:', err.message);
-  }
-
-  const targetCapa = MOCK_CAPAS.find((c) => c.id === capaId);
-  const targetLoc = targetCapa?.before_photo || { lat: 23.7505, lng: 86.4205 };
-
-  const distanceMeters = getDistanceMeters(
-    { latitude: afterPhotoMeta.lat, longitude: afterPhotoMeta.lng },
-    { latitude: targetLoc.lat, longitude: targetLoc.lng }
-  );
-
-  const isAtSpot = distanceMeters <= 30;
-  const passed = isAtSpot && !afterPhotoMeta.isMocked;
-
-  const checks = [
-    { name: 'Same location check', passed: isAtSpot, detail: `${distanceMeters}m from before-photo` },
-    { name: 'Fresh photo check (not reused)', passed: true, detail: 'Unique image hash verified' },
-    { name: 'Satya Proof trust score', passed: !afterPhotoMeta.isMocked, detail: afterPhotoMeta.isMocked ? 'Mock GPS flag detected' : 'Trust score 86' },
-    { name: 'AI Hazard resolution check', passed: passed, detail: passed ? 'Hazard crack no longer visible' : 'Move closer to target spot' },
-  ];
-
-  if (passed) {
-    enqueueOutboxItem({
-      client_uuid: clientUuid,
-      kind: 'capa_close',
-      payload: { capaId, afterPhotoMeta, checks },
-      file_uris: [afterPhotoMeta.uri],
-      priority: 1,
-    });
-  }
-
-  return {
-    passed,
-    status: passed ? 'sent_for_approval' : 'rejected',
-    checks,
-    distanceMeters,
-  };
-}
-
-export async function processVoiceAiApi(audioUri: string, language: string): Promise<VoiceReportResult> {
-  await simulateDelay(800);
-  return {
-    transcript: language === 'hi'
-      ? 'कन्वेयर 3 के पास छत में दरार दिखाई दे रही है और पत्थर गिर रहे हैं।'
-      : 'Visible roof crack near Conveyor 3 with falling stone fragments.',
-    structured: {
-      type: 'unsafe_condition',
-      category: 'roof',
-      hazard: 'Roof strata crack near Conveyor 3',
-      location_text: 'Seam 3, Level 2 Junction',
-      severity: 'critical',
     },
+  });
+}
+
+// ---------------------------------------------------------------- voice report
+
+/**
+ * Sends the recorded audio to the AI voice endpoint (POST /ai/voice). Returns null when the backend has no
+ * speech model yet, so the screen lets the user type the report instead.
+ */
+export async function processVoiceAiApi(audioUri: string, language: string): Promise<VoiceReportResult | null> {
+  const formData = new FormData();
+  if (Platform.OS === 'web') {
+    const blob = await (await fetch(audioUri)).blob();
+    formData.append('audio', blob, 'voice.webm');
+  } else {
+    formData.append('audio', { uri: audioUri, name: 'voice.m4a', type: 'audio/m4a' } as any);
+  }
+  formData.append('language', language);
+
+  try {
+    const res = await apiFetch<any>('/ai/voice', { method: 'POST', body: formData, timeoutMs: 60000 });
+    const s = res.structured || res;
+    return {
+      transcript: res.transcript || '',
+      structured: {
+        type: s.type || 'unsafe_condition',
+        category: s.category || 'other',
+        hazard: s.hazard || s.text || '',
+        location_text: s.location_text || '',
+        severity: s.severity || 'medium',
+      },
+    };
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 405 || err.status === 501 || err.status === 503)) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------- attendance
+
+export async function markAttendanceApi(opts: {
+  lat: number | null;
+  lng: number | null;
+  accuracy: number | null;
+  isMocked: boolean;
+  selfieUri: string;
+  selfieMeta: CaptureMeta | null;
+  workerId?: number | null;
+}): Promise<SubmitResult<{ valid: boolean; reason: string; time: string }>> {
+  const clientUuid = newClientUuid('attendance');
+  const mineId = requireMineId();
+  const device = await getAppDeviceInfo();
+  const gate = opts.workerId != null;
+  return submitOrQueue({
+    kind: 'attendance',
+    clientUuid,
+    body: {
+      mode: gate ? 'gate' : 'self',
+      worker_id: gate ? opts.workerId : undefined,
+      lat: opts.lat,
+      lng: opts.lng,
+      accuracy: opts.accuracy,
+      is_mocked: opts.isMocked,
+      device_id: device.deviceId,
+      client_uuid: clientUuid,
+    },
+    evidence: photoEvidence('selfie_evidence_id', opts.selfieUri, opts.selfieMeta, mineId),
+    send: async (body) => {
+      const res = await apiFetch<any>('/attendance', { method: 'POST', body: JSON.stringify(body) });
+      return { valid: Boolean(res.valid), reason: res.message || res.reason || '', time: res.time };
+    },
+  });
+}
+
+function toAttendance(r: any): AttendanceRecord {
+  const at = r.time ? new Date(r.time) : null;
+  return {
+    id: String(r.id),
+    worker_id: String(r.worker_id),
+    worker_name: r.worker_name,
+    mine_name: r.mine_name,
+    date: at ? at.toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' }) : '',
+    time: at ? at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+    valid: Boolean(r.valid),
+    reason: r.reason || undefined,
+    selfie_url: fileUrl(r.selfie?.url),
+    lat: r.lat ?? null,
+    lng: r.lng ?? null,
   };
 }
 
-export async function markAttendanceApi(lat: number, lng: number, selfieUri: string, isMocked: boolean) {
-  const clientUuid = `attendance-${Date.now()}`;
-  try {
-    let selfieEvidenceId: number | null = null;
-    if (selfieUri) {
-      const uploaded = await uploadEvidenceApi(selfieUri, 1, lat, lng, isMocked);
-      if (uploaded?.id) selfieEvidenceId = uploaded.id;
-    }
-
-    const res = await apiFetch<any>('/attendance', {
-      method: 'POST',
-      body: JSON.stringify({
-        lat,
-        lng,
-        is_mocked: isMocked,
-        mode: 'self',
-        selfie_evidence_id: selfieEvidenceId,
-        client_uuid: clientUuid,
-      }),
-      timeoutMs: 6000,
-    });
-
-    return {
-      valid: res.valid,
-      reason: res.reason || (res.valid ? 'Attendance recorded successfully' : 'Attendance verification failed'),
-    };
-  } catch (err: any) {
-    console.warn('[markAttendanceApi] Backend mark attendance error:', err.message);
+/** Workers see their own attendance; supervisors / contractor admins see the attendance they can monitor. */
+export async function fetchAttendanceHistoryApi(role?: string): Promise<AttendanceRecord[]> {
+  if (role === 'worker') {
+    const res = await apiFetch<any[]>('/attendance/me');
+    return (res || []).map(toAttendance);
   }
-
-  const inside = isPointInPolygon({ latitude: lat, longitude: lng }, MOONIDIH_MINE_POLYGON);
-  let valid = inside && !isMocked;
-  let reason = '';
-
-  if (isMocked) {
-    valid = false;
-    reason = 'Mocked location detected on device!';
-  } else if (!inside) {
-    valid = false;
-    reason = 'You are 1.2 km outside Moonidih mine boundary';
-  }
-
-  enqueueOutboxItem({
-    client_uuid: clientUuid,
-    kind: 'attendance',
-    payload: { lat, lng, valid, reason },
-    file_uris: [selfieUri],
-    priority: 1,
-  });
-
-  return { valid, reason };
+  const res = await apiFetch<{ items: any[] }>('/attendance?page_size=100');
+  return (res.items || []).map(toAttendance);
 }
 
-export async function fetchAttendanceHistoryApi(): Promise<AttendanceRecord[]> {
-  try {
-    const res = await apiFetch<{ items: any[] }>('/attendance', { timeoutMs: 5000 });
-    if (res && res.items) {
-      return res.items.map((r: any) => ({
-        id: String(r.id),
-        worker_id: String(r.worker_id),
-        worker_name: r.worker_name || 'Worker',
-        date: r.time ? r.time.split('T')[0] : new Date().toISOString().split('T')[0],
-        time: r.time ? new Date(r.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '08:00 AM',
-        valid: r.valid,
-        reason: r.reason || undefined,
-        selfie_url: r.selfie?.file_url,
-        lat: r.lat,
-        lng: r.lng,
-      }));
-    }
-  } catch (err: any) {
-    console.warn('[fetchAttendanceHistoryApi] Error fetching attendance history:', err.message);
-  }
-  return [];
-}
+// ---------------------------------------------------------------- grievances
 
-export async function submitGrievanceApi(category: string, text: string, anonymous: boolean) {
-  const clientUuid = `grievance-${Date.now()}`;
-  try {
-    const res = await apiFetch<any>('/grievances', {
-      method: 'POST',
-      body: JSON.stringify({
-        category: category.toLowerCase(),
-        text,
-        anonymous,
-        mine_id: 1,
-        client_uuid: clientUuid,
-      }),
-      timeoutMs: 5000,
-    });
-
-    return { token: res.token, status: res.status };
-  } catch (err: any) {
-    console.warn('[submitGrievanceApi] Backend call failed, queueing outbox:', err.message);
-  }
-
-  const token = `GRV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-
-  enqueueOutboxItem({
-    client_uuid: clientUuid,
+export async function submitGrievanceApi(
+  category: string,
+  text: string,
+  anonymous: boolean,
+  language: string
+): Promise<SubmitResult<{ token: string; status: string }>> {
+  const clientUuid = newClientUuid('grievance');
+  return submitOrQueue({
     kind: 'grievance',
-    payload: { token, category, text, anonymous },
-    file_uris: [],
-    priority: 1,
+    clientUuid,
+    body: { category, text, anonymous, language, mine_id: getActiveMineId() ?? undefined, client_uuid: clientUuid },
+    send: async (body) => {
+      const res = await apiFetch<any>('/grievances', { method: 'POST', body: JSON.stringify(body) });
+      return { token: res.token, status: res.status };
+    },
   });
-
-  return { token, status: 'new' };
 }
 
 export async function trackGrievanceApi(token: string): Promise<GrievanceItem | null> {
   try {
-    const res = await apiFetch<any>(`/grievances/track/${encodeURIComponent(token.trim().toUpperCase())}`, {
-      timeoutMs: 4000,
-    });
+    const res = await apiFetch<any>(`/grievances/track/${encodeURIComponent(token.trim().toUpperCase())}`);
     return {
       token: res.token,
       category: res.category,
-      text: res.text || '',
+      text: '',
       anonymous: true,
       status: res.status,
       response: res.response || undefined,
+      created_at: res.created_at,
       updated_at: res.updated_at,
     };
-  } catch (err: any) {
-    console.warn('[trackGrievanceApi] Tracking error:', err.message);
-    return null;
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
   }
 }
 
-export async function sendSosApi(lat: number, lng: number, note?: string) {
-  const clientUuid = `sos-${Date.now()}`;
-  try {
-    const res = await apiFetch<any>('/sos', {
-      method: 'POST',
-      body: JSON.stringify({
-        lat,
-        lng,
-        note: note || 'Emergency SOS trigger',
-        kind: 'other',
-        mine_id: 1,
-        client_uuid: clientUuid,
-      }),
-      timeoutMs: 4000,
-    });
-    return { success: true, alertId: `SOS-${res.id}` };
-  } catch (err: any) {
-    console.warn('[sendSosApi] Backend SOS error, using outbox fallback:', err.message);
-  }
+// ---------------------------------------------------------------- SOS & field reports
 
-  enqueueOutboxItem({
-    client_uuid: clientUuid,
+export type SosKind = 'fire' | 'roof_fall' | 'gas' | 'injury' | 'flooding' | 'other';
+
+export async function sendSosApi(opts: {
+  kind: SosKind;
+  note: string;
+  lat: number | null;
+  lng: number | null;
+  accuracy: number | null;
+}): Promise<SubmitResult<{ id: number; notified: number }>> {
+  const clientUuid = newClientUuid('sos');
+  return submitOrQueue({
     kind: 'sos',
-    payload: { lat, lng, note, time: new Date().toISOString() },
-    file_uris: [],
+    clientUuid,
     priority: 0,
+    body: {
+      kind: opts.kind,
+      note: opts.note,
+      lat: opts.lat,
+      lng: opts.lng,
+      accuracy: opts.accuracy,
+      mine_id: getActiveMineId() ?? undefined,
+      client_uuid: clientUuid,
+    },
+    send: async (body) => {
+      const res = await apiFetch<any>('/sos', { method: 'POST', body: JSON.stringify(body) });
+      return { id: res.id, notified: res.notified ?? 0 };
+    },
   });
-
-  return { success: true, alertId: `SOS-${Date.now()}` };
 }
 
 export async function submitObservationApi(data: {
@@ -524,129 +493,209 @@ export async function submitObservationApi(data: {
   text: string;
   severity: 'critical' | 'high' | 'medium' | 'low';
   location_text: string;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   anonymous: boolean;
   photoUri?: string | null;
+  photoMeta?: CaptureMeta | null;
   source?: 'app' | 'voice';
   transcript?: string;
-}) {
-  const clientUuid = `observation-${Date.now()}`;
-  try {
-    let evidenceId: number | null = null;
-    if (data.photoUri) {
-      const uploaded = await uploadEvidenceApi(data.photoUri, 1, data.lat, data.lng);
-      if (uploaded?.id) evidenceId = uploaded.id;
-    }
-
-    const res = await apiFetch<any>('/observations', {
-      method: 'POST',
-      body: JSON.stringify({
-        mine_id: 1,
-        type: data.type,
-        category: data.category.toLowerCase().replace(/[^a-z0-9_]/g, '_'),
-        text: data.text,
-        severity: data.severity,
-        lat: data.lat,
-        lng: data.lng,
-        location_text: data.location_text,
-        source: data.source || 'app',
-        anonymous: data.anonymous,
-        evidence_id: evidenceId,
-        transcript: data.transcript,
-        client_uuid: clientUuid,
-      }),
-      timeoutMs: 6000,
-    });
-
-    return { id: `REP-${res.id}`, success: true };
-  } catch (err: any) {
-    console.warn('[submitObservationApi] Error submitting report, queueing outbox:', err.message);
-  }
-
-  enqueueOutboxItem({
-    client_uuid: clientUuid,
+  language?: string;
+}): Promise<SubmitResult<{ id: number; capa_id: number | null }>> {
+  const clientUuid = newClientUuid('observation');
+  const mineId = requireMineId();
+  return submitOrQueue({
     kind: 'observation',
-    payload: data,
-    file_uris: data.photoUri ? [data.photoUri] : [],
-    priority: 1,
+    clientUuid,
+    body: {
+      mine_id: mineId,
+      type: data.type,
+      category: data.category,
+      text: data.text,
+      severity: data.severity,
+      lat: data.lat,
+      lng: data.lng,
+      location_text: data.location_text || null,
+      source: data.source || 'app',
+      language: data.language || 'en',
+      anonymous: data.anonymous,
+      transcript: data.transcript || null,
+      client_uuid: clientUuid,
+    },
+    evidence: photoEvidence('evidence_id', data.photoUri, data.photoMeta, mineId),
+    send: async (body) => {
+      const res = await apiFetch<any>('/observations', { method: 'POST', body: JSON.stringify(body) });
+      return { id: res.id, capa_id: res.capa_id ?? null };
+    },
   });
-
-  return { id: `REP-${Math.floor(10000 + Math.random() * 90000)}`, success: true };
 }
 
-export async function fetchNotificationsApi(): Promise<NotificationItem[]> {
-  try {
-    const res = await apiFetch<{ items: any[] }>('/notifications', { timeoutMs: 4000 });
-    if (res && res.items) {
-      return res.items.map((n: any) => ({
-        id: String(n.id),
-        title: n.title,
-        message: n.message,
-        type: n.kind === 'incident' || n.level === 'critical' ? 'escalation' : n.kind === 'capa' ? 'approval' : 'reminder',
-        timestamp: n.created_at,
-        read: n.read,
-        related_id: n.link,
-      }));
-    }
-  } catch (err: any) {
-    console.warn('[fetchNotificationsApi] Notifications fetch error:', err.message);
-  }
-  return MOCK_NOTIFICATIONS;
+// ---------------------------------------------------------------- notifications
+
+function toNotification(n: any): NotificationItem {
+  const type: NotificationItem['type'] =
+    n.level === 'critical' || n.kind === 'incident' || n.kind === 'sos' || n.kind === 'escalation'
+      ? 'escalation'
+      : n.kind === 'approval'
+      ? 'approval'
+      : n.kind === 'rejection'
+      ? 'rejection'
+      : 'reminder';
+  return {
+    id: String(n.id),
+    title: n.title,
+    message: n.body,
+    type,
+    timestamp: n.created_at,
+    read: Boolean(n.read),
+    related_id: n.link || undefined,
+  };
 }
 
-export async function startInspectionApi(mineId: number = 1, type: string = 'internal', checklistId: number = 1) {
-  const clientUuid = `insp-${Date.now()}`;
-  return await apiFetch<any>('/inspections', {
+export async function fetchNotificationsApi(pageSize = 50): Promise<{ items: NotificationItem[]; unread: number }> {
+  const res = await apiFetch<{ items: any[]; unread: number }>(`/notifications?page_size=${pageSize}`);
+  return { items: (res.items || []).map(toNotification), unread: res.unread || 0 };
+}
+
+export async function markNotificationReadApi(id: string): Promise<void> {
+  await apiFetch<any>(`/notifications/${encodeURIComponent(id)}/read`, { method: 'POST' });
+}
+
+// ---------------------------------------------------------------- inspections
+
+export async function fetchChecklistsApi(mineId: number): Promise<{ id: string; name: string; items: any[] }[]> {
+  const res = await apiFetch<any[]>(`/checklists?mine_id=${mineId}`);
+  return (res || []).map((c) => ({ id: String(c.id), name: c.name, items: c.items || [] }));
+}
+
+export async function startInspectionApi(opts: {
+  type: 'internal' | 'statutory' | 'dgms' | 'spcb';
+  checklistId: number;
+  lat: number | null;
+  lng: number | null;
+}): Promise<InspectionDetail> {
+  const res = await apiFetch<any>('/inspections', {
     method: 'POST',
     body: JSON.stringify({
-      mine_id: mineId,
-      type,
-      checklist_id: checklistId,
-      lat: 23.7505,
-      lng: 86.4205,
-      client_uuid: clientUuid,
+      mine_id: requireMineId(),
+      type: opts.type,
+      checklist_id: opts.checklistId,
+      lat: opts.lat,
+      lng: opts.lng,
+      client_uuid: newClientUuid('insp'),
     }),
   });
+  return toInspection(res);
+}
+
+function toInspection(r: any): InspectionDetail {
+  return {
+    id: String(r.id),
+    mine_id: r.mine_id,
+    mine_name: r.mine_name,
+    type: r.type,
+    status: r.status,
+    checklist_id: r.checklist_id ?? null,
+    started_at: r.started_at,
+    submitted_at: r.submitted_at ?? null,
+    checklist_answers: r.checklist_answers ?? null,
+    findings: (r.findings || []).map((f: any) => ({
+      id: String(f.id),
+      category: f.category,
+      description: f.description,
+      severity: f.severity,
+      has_photo: Boolean(f.photo_evidence_id),
+      checklist_item_id: f.checklist_item_id ?? null,
+      capa_id: f.capa_id ?? null,
+    })),
+  };
+}
+
+export async function fetchInspectionDetailApi(inspectionId: string): Promise<InspectionDetail> {
+  return toInspection(await apiFetch<any>(`/inspections/${encodeURIComponent(inspectionId)}`));
 }
 
 export async function addFindingApi(
-  inspectionId: number,
+  inspectionId: string,
   finding: {
     category: string;
     description: string;
     severity: 'critical' | 'high' | 'medium' | 'low';
-    lat: number;
-    lng: number;
-    photoUri?: string;
+    lat: number | null;
+    lng: number | null;
+    checklistItemId?: string | null;
+    photoUri?: string | null;
+    photoMeta?: CaptureMeta | null;
   }
-) {
-  let photoId: number | null = null;
-  if (finding.photoUri) {
-    const uploaded = await uploadEvidenceApi(finding.photoUri, 1, finding.lat, finding.lng);
-    if (uploaded?.id) photoId = uploaded.id;
-  }
-
-  return await apiFetch<any>(`/inspections/${inspectionId}/findings`, {
-    method: 'POST',
-    body: JSON.stringify({
+): Promise<SubmitResult<{ id: number }>> {
+  const clientUuid = newClientUuid('finding');
+  const mineId = requireMineId();
+  return submitOrQueue({
+    kind: 'finding',
+    clientUuid,
+    body: {
+      inspection_id: Number(inspectionId),
       category: finding.category,
       description: finding.description,
       severity: finding.severity,
       lat: finding.lat,
       lng: finding.lng,
-      photo_evidence_id: photoId,
-    }),
+      checklist_item_id: finding.checklistItemId || null,
+      client_uuid: clientUuid,
+    },
+    evidence: photoEvidence('photo_evidence_id', finding.photoUri, finding.photoMeta, mineId),
+    send: async (body) => {
+      const { inspection_id, ...rest } = body;
+      const res = await apiFetch<any>(`/inspections/${inspection_id}/findings`, {
+        method: 'POST',
+        body: JSON.stringify(rest),
+      });
+      return { id: res.id };
+    },
   });
 }
 
-export async function submitInspectionApi(inspectionId: number, notes?: string) {
-  return await apiFetch<any>(`/inspections/${inspectionId}/submit`, {
-    method: 'POST',
-    body: JSON.stringify({ notes }),
+export async function submitInspectionApi(
+  inspectionId: string,
+  answers: { item_id: string; answer: 'ok' | 'not_ok' | 'na' }[],
+  notes?: string
+): Promise<SubmitResult<InspectionDetail>> {
+  return submitOrQueue({
+    kind: 'inspection_submit',
+    clientUuid: newClientUuid('insp-submit'),
+    body: { inspection_id: Number(inspectionId), checklist_answers: answers, notes: notes || null },
+    send: async (body) => {
+      const { inspection_id, ...rest } = body;
+      return toInspection(
+        await apiFetch<any>(`/inspections/${inspection_id}/submit`, { method: 'POST', body: JSON.stringify(rest) })
+      );
+    },
   });
 }
 
-export async function fetchInspectionDetailApi(inspectionId: number) {
-  return await apiFetch<any>(`/inspections/${inspectionId}`);
+// ---------------------------------------------------------------- my reports & map
+
+export async function fetchMyReportsApi(): Promise<MyReportItem[]> {
+  const res = await apiFetch<{ items: any[] }>('/me/reports?page_size=100');
+  return (res.items || []).map((r) => ({
+    id: `${r.kind}-${r.id}`,
+    kind: r.kind,
+    title: r.title,
+    status: r.status,
+    created_at: r.created_at,
+    trust_score: r.trust_score ?? null,
+    flags: r.flags || [],
+  }));
+}
+
+export async function fetchMapPinsApi(mineId: number): Promise<MapPin[]> {
+  const res = await apiFetch<any[]>(`/gis/pins?mine_id=${mineId}`);
+  return (res || []).map((p) => ({
+    id: p.id,
+    type: p.type,
+    title: p.title,
+    severity: p.severity,
+    lat: p.lat,
+    lng: p.lng,
+  }));
 }

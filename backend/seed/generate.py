@@ -104,8 +104,15 @@ class Generator:
         return min(level, 0.95)
 
     def at(self, day: date, hour: float) -> datetime:
-        """Local (IST) day + hour -> stored UTC datetime."""
-        return datetime.combine(day, time(), tzinfo=timezone.utc) + timedelta(hours=hour) - IST
+        """Local (IST) day + hour -> stored UTC datetime. Today's events are squeezed into the part of the day
+        that has already passed, so no record is dated in the future."""
+        start = datetime.combine(day, time(), tzinfo=timezone.utc) - IST
+        value = start + timedelta(hours=hour)
+        latest = self.now - timedelta(minutes=5)
+        if value > latest:
+            # today: keep the order of the day's events; a later day (e.g. a task for next year): "just now"
+            value = start + (latest - start) * min(max(hour, 0.0), 24.0) / 24 if latest > start else latest
+        return value
 
     def point_in(self, mine: OrgUnit) -> tuple[float, float]:
         angle, r = self.rng.uniform(0, 2 * math.pi), self.rng.uniform(0, 0.005)

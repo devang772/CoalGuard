@@ -1,9 +1,8 @@
-"""Risk % per mine for the map and lists.
+"""Risk % per mine for the map, mine lists and dashboards.
 
-Uses the ML teammate's app.ai.risk_model.predict_risk(db, mine_ids) when available.
-Until then (or if it fails) a simple, explainable score from overdue work and warning signs is used.
-"""
-import importlib
+The ML model (app.ai.risk_model, trained on this database) is used whenever it can run. When it can't (a new
+deployment without enough history, or a model error), a simple rule score is shown instead and every row says
+so: `source` is "rule_score" and `ml_status` explains why. Nothing is presented as ML output unless it is."""
 import logging
 from datetime import timedelta
 
@@ -56,16 +55,26 @@ def mine_risk(db: Session, mine_ids: list[int]) -> dict[int, dict]:
     if not mine_ids:
         return {}
     try:
-        module = importlib.import_module("app.ai.risk_model")
-        rows = module.predict_risk(db, mine_ids)
-        result = {r["mine_id"]: {"risk_pct": r["risk_pct"], "level": r.get("level") or risk_level(r["risk_pct"]),
-                                 "reasons": r.get("reasons", []), "source": "ml_model"} for r in rows}
-        missing = [m for m in mine_ids if m not in result]
-        if missing:
-            result.update(simple_risk(db, missing))
-        return result
+        from app.ai.risk_model import ModelUnavailable, predict_risk
     except ImportError:
-        pass
-    except Exception:  # noqa: BLE001 - never break the map because of the model
-        log.exception("ML risk model failed; using the simple score")
-    return simple_risk(db, mine_ids)
+        return _rule_score(db, mine_ids, "The ML risk model is not installed.")
+    try:
+        rows = predict_risk(db, mine_ids)
+    except ModelUnavailable as exc:
+        return _rule_score(db, mine_ids, str(exc))
+    except Exception as exc:  # noqa: BLE001 - never break the map because of the model
+        log.exception("ML risk model failed; showing the rule score")
+        return _rule_score(db, mine_ids, f"The ML risk model failed: {exc}")
+    result = {r["mine_id"]: {"risk_pct": r["risk_pct"], "level": r["level"], "reasons": r["reasons"],
+                             "source": "ml_model", "features_as_of": r["features_as_of"]} for r in rows}
+    missing = [m for m in mine_ids if m not in result]
+    if missing:
+        result.update(_rule_score(db, missing, "The ML model returned no prediction for this mine."))
+    return result
+
+
+def _rule_score(db: Session, mine_ids: list[int], why: str) -> dict[int, dict]:
+    rows = simple_risk(db, mine_ids)
+    for row in rows.values():
+        row["source"], row["ml_status"] = "rule_score", why
+    return rows

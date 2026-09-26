@@ -4,6 +4,7 @@ from datetime import date, timedelta
 import pytest
 from sqlalchemy import select
 
+from app.config import settings
 from app.db import SessionLocal
 from app.models import Attendance, Contractor, OrgUnit, User, Worker
 from app.utils import ist_day_start_utc, today_ist
@@ -140,6 +141,16 @@ def test_self_attendance_then_gate_entry(client, login, birsa):
     assert gate.status_code == 200 and gate.json()["gate_entry"] is True
     mine_rows = client.get("/attendance/me", headers=login(WORKER)).json()
     assert mine_rows[0]["gate_entry"] is True
+
+
+def test_demo_mode_allows_many_marks_a_day(client, login, birsa, monkeypatch):
+    monkeypatch.setattr(settings, "attendance_allow_multiple", True)
+    moonidih = mine("Moonidih UG")
+    assert mark(client, login, WORKER, moonidih).status_code == 201
+    assert mark(client, login, WORKER, moonidih).status_code == 201
+    today = [r for r in client.get("/attendance/me", headers=login(WORKER)).json()
+             if r["time"] >= ist_day_start_utc(today_ist()).isoformat()[:19]]
+    assert len(today) == 2
 
 
 def test_attendance_rules_give_reasons(client, login, birsa):

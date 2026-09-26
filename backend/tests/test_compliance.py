@@ -100,7 +100,7 @@ def test_explosives_toggle_updates_obligations_and_tasks(client, login):
     off = put_profile(client, login, dhansar, uses_explosives=False)
     assert off.status_code == 200, off.text
     body = off.json()["obligations"]
-    assert body["source"] == "rules_fallback" and "not installed" in body["note"]
+    assert body["source"] == "ml_engine" and body["note"] is None      # the law-grounded engine in app/ai
     assert {"SAF-EXPL-D", "SAF-MAG-W"} <= set(body["removed"])
     assert "SAF-EXPL-D" not in active_codes(dhansar)
     with SessionLocal() as db:
@@ -116,6 +116,35 @@ def test_explosives_toggle_updates_obligations_and_tasks(client, login):
     today_tasks = client.get("/tasks", params={"mine_id": dhansar, "due": "today", "page_size": 200},
                              headers=login(CIL)).json()["items"]
     assert any(t["obligation"]["code"] == "SAF-EXPL-D" for t in today_tasks)
+
+
+def test_ml_engine_grounds_duties_in_the_law_and_creates_tasks(client, login):
+    dhansar = mine_id("Dhansar UG")
+    put_profile(client, login, dhansar)
+    links = {l["obligation"]["code"]: l for l in
+             client.get(f"/mines/{dhansar}/obligations", params={"status": "active"}, headers=login(CIL)).json()}
+    assert all(l["source"] == "ml_engine" for l in links.values())
+    # a catalogue duty is tied to the regulation that says it
+    assert 'Reg 150 "Danger from underground inundation"' in links["SAF-PUMP-W"]["reason"]
+    # a duty read straight from the law: shafts and outlets examined every seven days (CMR 2017 Reg 75)
+    shaft = links["CMR-75-1"]
+    assert shaft["obligation"]["frequency"] == "weekly" and shaft["obligation"]["law_ref"] == "CMR 2017, Reg 75(1)"
+    assert "every seven days" in shaft["reason"] and "underground workings" in shaft["reason"]
+    tasks = client.get("/tasks", params={"mine_id": dhansar, "page_size": 200}, headers=login(CIL)).json()["items"]
+    assert any(t["obligation"]["code"] == "CMR-75-1" for t in tasks)
+    # the curated catalogue row is not rewritten by the engine
+    with SessionLocal() as db:
+        pump = db.scalar(select(Obligation).where(Obligation.code == "SAF-PUMP-W"))
+        assert pump.source != "ml_engine" and pump.law_ref == "CMR 2017 (inundation precautions)"
+
+
+def test_ml_engine_reads_scope_from_the_law():
+    from app.ai.obligation_engine import recommend_obligations
+    base = {**DHANSAR_PROFILE, "cto_valid_till": None}
+    underground = {i["code"] for i in recommend_obligations(base)}
+    opencast = {i["code"] for i in recommend_obligations({**base, "working_method": "OC", "seam_gas_degree": None})}
+    assert "CMR-75-1" in underground and "CMR-75-1" not in opencast          # shafts exist only underground
+    assert "SAF-HAUL-D" in opencast and "SAF-HAUL-D" not in underground
 
 
 def test_switch_to_opencast_changes_rules(client, login):

@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ShieldCheck,
   Phone,
@@ -8,8 +8,6 @@ import {
   Eye,
   EyeOff,
   ArrowRight,
-  Sparkles,
-  Mountain,
   AlertTriangle,
 } from "lucide-react";
 import { loginApi } from "@/lib/api";
@@ -28,15 +26,6 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
-const demoAccounts = [
-  { phone: "9000000001", role: "CIL Admin", name: "Shri Rajesh Verma", org: "All 12 mines" },
-  { phone: "9000000002", role: "Subsidiary Admin", name: "Er. A. K. Choudhary", org: "BCCL (4 mines)" },
-  { phone: "9000000003", role: "Area GM", name: "Shri P. K. Mishra", org: "Jharia Area" },
-  { phone: "9000000004", role: "Mine Manager", name: "Vikram Mahato", org: "Moonidih UG" },
-  { phone: "9000000005", role: "Regulator (DGMS)", name: "DGMS Inspector", org: "BCCL (read-only)" },
-  { phone: "9000000007", role: "Safety Officer", name: "Safety Officer", org: "Moonidih UG" },
-];
-
 function LoginPage() {
   const navigate = useNavigate();
   const { loginUser, isAuthenticated } = useAppStore();
@@ -46,10 +35,16 @@ function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
-  // If already authenticated, redirect to dashboard
-  if (isAuthenticated) {
-    navigate({ to: "/dashboard" });
+  useEffect(() => {
+    setHydrated(true);
+    if (hydrated && isAuthenticated) {
+      void navigate({ to: "/dashboard" });
+    }
+  }, [hydrated, isAuthenticated, navigate]);
+
+  if (!hydrated || isAuthenticated) {
     return null;
   }
 
@@ -73,22 +68,6 @@ function LoginPage() {
       navigate({ to: "/dashboard" });
     } catch (err: any) {
       setError(err.message || "Login failed. Please check your credentials.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDemoLogin = async (demoPhone: string) => {
-    setPhone(demoPhone);
-    setPassword("demo123");
-    setError(null);
-    setLoading(true);
-    try {
-      const res = await loginApi(demoPhone, "demo123");
-      loginUser(res.access_token, res.user);
-      navigate({ to: "/dashboard" });
-    } catch (err: any) {
-      setError(err.message || "Demo login failed. Is the backend running?");
     } finally {
       setLoading(false);
     }
@@ -198,35 +177,6 @@ function LoginPage() {
               )}
             </button>
           </form>
-        </div>
-
-        {/* Demo Accounts Quick Login */}
-        <div className="mt-6 bg-white/60 backdrop-blur-xl border border-slate-200/60 rounded-2xl p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Sparkles className="w-4 h-4 text-amber-500" />
-            <h3 className="text-sm font-semibold text-slate-700">Quick Demo Login</h3>
-            <span className="text-[10px] font-mono text-slate-400 ml-auto">password: demo123</span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {demoAccounts.map((account) => (
-              <button
-                key={account.phone}
-                onClick={() => handleDemoLogin(account.phone)}
-                disabled={loading}
-                className="group flex items-start gap-3 p-3 rounded-xl border border-slate-100 bg-white/70 hover:bg-emerald-50 hover:border-emerald-200 transition-all text-left disabled:opacity-50 cursor-pointer"
-              >
-                <div className="w-8 h-8 rounded-lg bg-slate-100 group-hover:bg-emerald-100 flex items-center justify-center shrink-0 transition-colors">
-                  <Mountain className="w-4 h-4 text-slate-500 group-hover:text-emerald-600 transition-colors" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-slate-800 truncate">{account.role}</p>
-                  <p className="text-[11px] text-slate-500 truncate">{account.org}</p>
-                  <p className="text-[10px] font-mono text-slate-400 mt-0.5">{account.phone}</p>
-                </div>
-              </button>
-            ))}
-          </div>
         </div>
 
         {/* Footer */}

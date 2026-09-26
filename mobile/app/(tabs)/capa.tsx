@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
-import { MOCK_CAPAS } from '../../src/api/mock/data';
+import { fetchCapasApi } from '../../src/api/endpoints';
+import { useApi } from '../../src/lib/useApi';
 import { formatDueText } from '../../src/lib/format';
 import { TrustBadge } from '../../src/components/TrustBadge';
 import { colors } from '../../src/theme/colors';
@@ -9,14 +10,16 @@ import { colors } from '../../src/theme/colors';
 export default function CapaListScreen() {
   const router = useRouter();
   const [tab, setTab] = useState<'open' | 'in_review' | 'closed' | 'rejected'>('open');
+  const [refreshing, setRefreshing] = useState(false);
 
-  const filteredCapas = MOCK_CAPAS.filter((item) => {
-    if (tab === 'open') return item.status === 'open';
-    if (tab === 'in_review') return item.status === 'in_review';
-    if (tab === 'closed') return item.status === 'closed';
-    if (tab === 'rejected') return item.status === 'rejected';
-    return true;
-  });
+  const capas = useApi(() => fetchCapasApi(tab), [tab]);
+  const filteredCapas = capas.data || [];
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await capas.refresh();
+    setRefreshing(false);
+  };
 
   return (
     <View style={styles.container}>
@@ -39,6 +42,9 @@ export default function CapaListScreen() {
         data={filteredCapas}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: 16 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.emerald]} tintColor={colors.emerald} />
+        }
         renderItem={({ item }) => {
           const due = formatDueText(item.due_at);
           return (
@@ -88,7 +94,7 @@ export default function CapaListScreen() {
                     ⏰ {due.text}
                   </Text>
 
-                  {item.status === 'open' && (
+                  {(item.status === 'open' || item.status === 'rejected') && (
                     <TouchableOpacity
                       style={styles.closeActionBtn}
                       onPress={() => router.push(`/capa/${item.id}/close` as any)}
@@ -97,7 +103,9 @@ export default function CapaListScreen() {
                     </TouchableOpacity>
                   )}
 
-                  {item.trust_score && <TrustBadge score={item.trust_score} showDetails={false} />}
+                  {item.trust_score != null && (
+                    <TrustBadge score={item.trust_score} flags={item.trust_flags} showDetails={false} />
+                  )}
                 </View>
               </View>
             </TouchableOpacity>

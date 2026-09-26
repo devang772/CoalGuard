@@ -1,22 +1,31 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { fetchAttendanceHistoryApi } from '../../src/api/endpoints';
+import { useApi } from '../../src/lib/useApi';
+import { useAuthStore } from '../../src/store/auth';
 import { colors } from '../../src/theme/colors';
 
-const LOG_ITEMS = [
-  { id: 'att-1', date: '25 Sep 2026', time: '07:02 AM', valid: true, mine: 'Moonidih UG' },
-  { id: 'att-2', date: '24 Sep 2026', time: '07:05 AM', valid: true, mine: 'Moonidih UG' },
-  { id: 'att-3', date: '23 Sep 2026', time: '07:45 AM', valid: false, reason: '1.2 km outside boundary', mine: 'Moonidih UG' },
-  { id: 'att-4', date: '22 Sep 2026', time: '07:00 AM', valid: true, mine: 'Moonidih UG' },
-];
-
 export default function AttendanceHistoryScreen() {
+  const role = useAuthStore((s) => s.user?.role);
+  const history = useApi(() => fetchAttendanceHistoryApi(role), [role]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await history.refresh();
+    setRefreshing(false);
+  };
+
   return (
     <View style={styles.container}>
       <FlatList
-        data={LOG_ITEMS}
+        data={history.data || []}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: 16 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.emerald]} tintColor={colors.emerald} />
+        }
         renderItem={({ item }) => (
           <View style={styles.card}>
             <View style={[styles.iconCircle, item.valid ? styles.passBg : styles.failBg]}>
@@ -24,7 +33,7 @@ export default function AttendanceHistoryScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.dateText}>{item.date} · {item.time}</Text>
-              <Text style={styles.mineText}>{item.mine}</Text>
+              <Text style={styles.mineText}>{role === 'worker' ? item.mine_name : `${item.worker_name} · ${item.mine_name}`}</Text>
               {item.reason && <Text style={styles.reasonText}>{item.reason}</Text>}
             </View>
             <Text style={[styles.statusText, { color: item.valid ? colors.success : colors.danger }]}>

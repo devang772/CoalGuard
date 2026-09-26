@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_roles, scope_mine_ids
 from app.constants import Role
+from app.config import settings
 from app.db import get_db
 from app.deps import Pagination, check_evidence
 from app.models import Attendance, Contractor, Evidence, OrgUnit, User, Worker
@@ -50,7 +51,8 @@ def mark_attendance(body: AttendanceMark, response: Response, user: User = Depen
       (this is the gate entry).
     Every rule is checked (active worker, contractor licence, safety training, medical, fake GPS, inside the
     mine, selfie trust). Invalid attempts are saved too, with the reason. Only one valid record per day;
-    a gate scan after a self-mark just adds the gate entry to that record."""
+    a gate scan after a self-mark just adds the gate entry to that record. With ATTENDANCE_ALLOW_MULTIPLE
+    (demo default) every mark is saved as a new record instead."""
     if body.client_uuid:
         existing = db.scalar(select(Attendance).where(Attendance.client_uuid == body.client_uuid))
         if existing is not None:
@@ -83,7 +85,7 @@ def mark_attendance(body: AttendanceMark, response: Response, user: User = Depen
     mine = db.get(OrgUnit, contractor.mine_id)
     today, now = today_ist(), utcnow()
 
-    existing = todays_valid_record(db, worker.id, today)
+    existing = None if settings.attendance_allow_multiple else todays_valid_record(db, worker.id, today)
     if existing is not None:
         if body.mode == "gate" and not existing.gate_entry:
             existing.gate_entry = True

@@ -106,6 +106,17 @@ def list_evidence(ids: str = Query(..., description="comma-separated ids, e.g. 1
             and (user.role not in OWN_PHOTOS_ONLY or e.uploaded_by == user.id)]
 
 
+@router.get("/recent")
+def recent_evidence(limit: int = Query(100, ge=1, le=200),
+                    user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Recent evidence in the caller's permitted mine scope, for the web Documents view."""
+    allowed = scope_mine_ids(db, user)
+    query = select(Evidence).where(Evidence.mine_id.in_(allowed)).order_by(Evidence.created_at.desc()).limit(limit)
+    if user.role in OWN_PHOTOS_ONLY:
+        query = query.where(Evidence.uploaded_by == user.id)
+    return [evidence_out(db, item) for item in db.scalars(query)]
+
+
 @router.get("/{evidence_id}")
 def get_evidence(evidence_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Evidence details: trust score, level, checks with reasons, location, times, and a signed image `url`

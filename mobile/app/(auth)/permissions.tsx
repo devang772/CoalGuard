@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as Location from 'expo-location';
@@ -7,6 +7,9 @@ import { Camera } from 'expo-camera';
 import { useAuthStore } from '../../src/store/auth';
 import { BigButton } from '../../src/components/BigButton';
 import { colors } from '../../src/theme/colors';
+import { BLOCKED_HELP, requestWebMedia, webMediaProblem, webPermissionStatus, WebPermission } from '../../src/lib/webPermissions';
+
+const notify = (title: string, message: string) => Alert.alert(title, message);
 
 export default function PermissionsScreen() {
   const router = useRouter();
@@ -21,48 +24,73 @@ export default function PermissionsScreen() {
       try {
         const { status: locStatus } = await Location.getForegroundPermissionsAsync();
         if (locStatus === 'granted') setLocationAllowed(true);
-
+      } catch {
+        // location status unknown: the button asks
+      }
+      if (Platform.OS === 'web') {
+        setCameraAllowed((await webPermissionStatus('camera')) === 'granted');
+        setMicAllowed((await webPermissionStatus('microphone')) === 'granted');
+        return;
+      }
+      try {
         const { status: camStatus } = await Camera.getCameraPermissionsAsync();
         if (camStatus === 'granted') setCameraAllowed(true);
-
         const { status: micStatus } = await Camera.getMicrophonePermissionsAsync();
         if (micStatus === 'granted') setMicAllowed(true);
       } catch {
-        // Fallback for web preview
+        // status unknown: the buttons ask
       }
     })();
   }, []);
+
+  const explain = (what: string, result: WebPermission) => {
+    const problem = webMediaProblem();
+    notify(`${what} not allowed`, result === 'denied' ? BLOCKED_HELP : problem || `Could not access the ${what.toLowerCase()}.`);
+  };
 
   const requestLocation = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       setLocationAllowed(status === 'granted');
-    } catch {
-      setLocationAllowed(true);
+      if (status !== 'granted') notify('Location not allowed', 'Allow location in the browser / phone settings, then try again.');
+    } catch (err: any) {
+      setLocationAllowed(false);
+      notify('Location not available', err?.message || 'Could not read the location permission.');
     }
   };
 
   const requestCamera = async () => {
-    try {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setCameraAllowed(status === 'granted');
-    } catch {
-      setCameraAllowed(true);
+    if (Platform.OS === 'web') {
+      const result = await requestWebMedia('camera');
+      setCameraAllowed(result === 'granted');
+      if (result !== 'granted') explain('Camera', result);
+      return;
     }
+    const { status } = await Camera.requestCameraPermissionsAsync();
+    setCameraAllowed(status === 'granted');
   };
 
   const requestMic = async () => {
-    try {
-      const { status } = await Camera.requestMicrophonePermissionsAsync();
-      setMicAllowed(status === 'granted');
-    } catch {
-      setMicAllowed(true);
+    if (Platform.OS === 'web') {
+      const result = await requestWebMedia('microphone');
+      setMicAllowed(result === 'granted');
+      if (result !== 'granted') explain('Microphone', result);
+      return;
     }
+    const { status } = await Camera.requestMicrophonePermissionsAsync();
+    setMicAllowed(status === 'granted');
   };
 
   const handleFinish = () => {
-    setPermissionsOnboarded(true);
-    router.replace('/(auth)/login' as any);
+    const go = () => {
+      setPermissionsOnboarded(true);
+      router.replace('/(auth)/login' as any);
+    };
+    const missing = [!locationAllowed && 'location', !cameraAllowed && 'camera', !micAllowed && 'microphone'].filter(Boolean);
+    if (!missing.length) return go();
+    Alert.alert('Some permissions are off',
+      `Without ${missing.join(', ')}, attendance, proof photos or voice reports won't work until you allow them.`,
+      [{ text: 'Go back', style: 'cancel' }, { text: 'Continue anyway', onPress: go }]);
   };
 
   return (
@@ -141,7 +169,7 @@ export default function PermissionsScreen() {
         </TouchableOpacity>
       </View>
 
-      <BigButton title="Continue" onPress={handleFinish} disabled={!locationAllowed} style={{ marginTop: 20 }} />
+      <BigButton title="Continue" onPress={handleFinish} style={{ marginTop: 20 }} />
     </ScrollView>
   );
 }

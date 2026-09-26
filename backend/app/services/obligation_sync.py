@@ -97,16 +97,18 @@ def _upsert_ml_obligations(db: Session, items: list[dict]) -> list[dict]:
     for item in items:
         ob = by_code.get(item["code"])
         if ob is None:
-            ob = Obligation(code=item["code"], status="approved", created_by_ai=True)
+            ob = Obligation(code=item["code"], status="approved", created_by_ai=True, source="ml_engine")
             db.add(ob)
             by_code[item["code"]] = ob
-        ob.source = "ml_engine"
-        ob.title = str(item["title"])[:300]
-        ob.law_ref = str(item.get("law_ref") or "Not specified")[:200]
-        ob.category, ob.frequency, ob.severity = item["category"], item["frequency"], item["severity"]
-        ob.evidence_needed = item.get("evidence_needed") or ""
-        ob.source_text = item.get("source_text")
-        ob.due_rule = _valid_due_rule(item.get("due_rule"))
+        if ob.source == "ml_engine":
+            # obligations the engine found in the law are kept up to date with it; curated catalogue duties the
+            # engine recommends are left exactly as they are (the fallback matcher and other mines use them too)
+            ob.title = str(item["title"])[:300]
+            ob.law_ref = str(item.get("law_ref") or "Not specified")[:200]
+            ob.category, ob.frequency, ob.severity = item["category"], item["frequency"], item["severity"]
+            ob.evidence_needed = item.get("evidence_needed") or ""
+            ob.source_text = item.get("source_text")
+            ob.due_rule = _valid_due_rule(item.get("due_rule"))
         db.flush()
         confidence = item.get("confidence", 1.0)
         recommendations.append({

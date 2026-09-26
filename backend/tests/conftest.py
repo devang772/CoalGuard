@@ -7,7 +7,9 @@ os.environ["DATABASE_URL"] = f"sqlite:///{os.path.join(_tmp_dir, 'test.db')}"
 os.environ["AUTO_BOOTSTRAP"] = "true"
 os.environ["JWT_SECRET"] = "test-secret-please-ignore-0123456789"
 os.environ["UPLOAD_DIR"] = os.path.join(_tmp_dir, "uploads")
+os.environ["ATTENDANCE_ALLOW_MULTIPLE"] = "false"   # tests check the real one-per-day rule
 os.environ["SCHEDULER_ENABLED"] = "false"          # tests run jobs by hand with a fake clock
+os.environ["AI_MODEL_DIR"] = os.path.join(_tmp_dir, "models")     # never overwrite the dev model file
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

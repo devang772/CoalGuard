@@ -3,11 +3,18 @@ import { View, Text, StyleSheet, ScrollView, TextInput, Alert, TouchableOpacity 
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store/auth';
-import { processVoiceAiApi } from '../../src/api/endpoints';
+import { processVoiceAiApi, submitObservationApi } from '../../src/api/endpoints';
+import { getCurrentFix } from '../../src/lib/location';
 import { VoiceRecorder } from '../../src/components/VoiceRecorder';
 import { BigButton } from '../../src/components/BigButton';
 import { VoiceReportResult } from '../../src/api/types';
 import { colors } from '../../src/theme/colors';
+
+// Used when the backend has no speech model: the worker types / corrects the report in the same form.
+const EMPTY_RESULT: VoiceReportResult = {
+  transcript: '',
+  structured: { type: 'unsafe_condition', category: 'other', hazard: '', location_text: '', severity: 'medium' },
+};
 
 export default function VoiceReportScreen() {
   const router = useRouter();
@@ -15,6 +22,7 @@ export default function VoiceReportScreen() {
 
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [aiResult, setAiResult] = useState<VoiceReportResult | null>(null);
 
   // Editable fields extracted by AI
@@ -27,23 +35,57 @@ export default function VoiceReportScreen() {
     setLoading(true);
     try {
       const res = await processVoiceAiApi(uri, selectedLanguage);
-      setAiResult(res);
-      setTranscript(res.transcript);
-      setHazardText(res.structured.hazard);
-      setLocationText(res.structured.location_text);
+      if (!res) {
+        Alert.alert('Type Your Report', 'Speech-to-text is not available on the server yet. Please type what you saw below.');
+      }
+      const result = res || EMPTY_RESULT;
+      setAiResult(result);
+      setTranscript(result.transcript);
+      setHazardText(result.structured.hazard);
+      setLocationText(result.structured.location_text);
     } catch (e: any) {
-      Alert.alert('Voice Processing Saved Offline', 'Saved audio locally. AI will parse transcript when online.');
+      Alert.alert('Voice Processing Failed', `${e.message}\nPlease type what you saw below.`);
+      setAiResult(EMPTY_RESULT);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleConfirmSubmit = () => {
-    Alert.alert(
-      'Hazard Reported ✓',
-      'Observation saved to outbox! Reference ID: VR-' + Math.floor(1000 + Math.random() * 9000),
-      [{ text: 'OK', onPress: () => router.replace('/(tabs)/home') }]
-    );
+  const handleConfirmSubmit = async () => {
+    if (!aiResult) return;
+    const text = (hazardText || transcript).trim();
+    if (text.length < 3) {
+      Alert.alert('Required Info', 'Please describe the hazard.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const fix = await getCurrentFix();
+      const res = await submitObservationApi({
+        type: aiResult.structured.type,
+        category: aiResult.structured.category,
+        text,
+        severity: aiResult.structured.severity,
+        location_text: locationText,
+        lat: fix?.lat ?? null,
+        lng: fix?.lng ?? null,
+        anonymous: false,
+        source: 'voice',
+        transcript: transcript || undefined,
+        language: selectedLanguage,
+      });
+      Alert.alert(
+        'Hazard Reported ✓',
+        res.queued
+          ? 'No network: the report is saved in the outbox and will sync automatically.'
+          : `Observation sent. Reference ID: VR-${res.data?.id}`,
+        [{ text: 'OK', onPress: () => router.replace('/(tabs)/home') }]
+      );
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -102,6 +144,7 @@ export default function VoiceReportScreen() {
           <BigButton
             title="Confirm & Submit Hazard Report ✓"
             onPress={handleConfirmSubmit}
+            loading={submitting}
             style={{ marginTop: 20 }}
           />
 

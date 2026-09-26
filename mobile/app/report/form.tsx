@@ -1,10 +1,12 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Switch, Image, ActivityIndicator } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Switch, Image, Alert } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { BigButton } from '../../src/components/BigButton';
-import { useSettingsStore } from '../../src/store/settings';
 import { submitObservationApi } from '../../src/api/endpoints';
+import { useCapturedPhoto } from '../../src/lib/capture';
+import { getCurrentFix } from '../../src/lib/location';
+import { useAuthStore } from '../../src/store/auth';
 import { colors } from '../../src/theme/colors';
 
 const REPORT_TYPES = [
@@ -18,40 +20,56 @@ export default function FormReportScreen() {
   const router = useRouter();
   const [reportType, setReportType] = useState('unsafe_condition');
   const [description, setDescription] = useState('');
-  const [exactSpot, setExactSpot] = useState('Seam 3, Level 2 Junction');
+  const [exactSpot, setExactSpot] = useState('');
   const [anonymous, setAnonymous] = useState(false);
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const { uri: photoUri, meta: photoMeta } = useCapturedPhoto();
   const [submitting, setSubmitting] = useState(false);
-
-  useFocusEffect(
-    useCallback(() => {
-      const { lastCapturedPhoto } = useSettingsStore.getState();
-      if (lastCapturedPhoto) {
-        setPhotoUri(lastCapturedPhoto);
-      }
-    }, [])
-  );
+  const { selectedLanguage } = useAuthStore();
 
   const handleSubmit = async () => {
-    setSubmitting(true);
-    const res = await submitObservationApi({
-      type: reportType as any,
-      category: 'roof',
-      text: description || `${reportType} reported at ${exactSpot}`,
-      severity: reportType === 'incident' ? 'critical' : 'medium',
-      location_text: exactSpot,
-      lat: 23.7505,
-      lng: 86.4205,
-      anonymous,
-      photoUri,
-      source: 'app',
-    });
-    setSubmitting(false);
+    const label = REPORT_TYPES.find((t) => t.key === reportType)?.label || reportType;
+    const text = description.trim() || (exactSpot.trim() ? `${label} reported at ${exactSpot.trim()}` : '');
+    if (text.length < 3) {
+      Alert.alert('Required Info', 'Please describe what you saw.');
+      return;
+    }
+    if ((reportType === 'unsafe_condition' || reportType === 'incident') && !photoUri) {
+      Alert.alert('Photo Required', 'A Satya Proof photo is required for unsafe conditions and incidents.');
+      return;
+    }
 
-    router.push({
-      pathname: '/report/success' as any,
-      params: { refId: res?.id || ('REP-' + Math.floor(10000 + Math.random() * 90000)) },
-    });
+    setSubmitting(true);
+    try {
+      const fix = photoMeta?.lat != null ? null : await getCurrentFix();
+      const res = await submitObservationApi({
+        type: reportType as any,
+        category: 'other',
+        text,
+        severity: reportType === 'incident' ? 'critical' : 'medium',
+        location_text: exactSpot,
+        lat: photoMeta?.lat ?? fix?.lat ?? null,
+        lng: photoMeta?.lng ?? fix?.lng ?? null,
+        anonymous,
+        photoUri,
+        photoMeta,
+        source: 'app',
+        language: selectedLanguage,
+      });
+
+      router.push({
+        pathname: '/report/success' as any,
+        params: {
+          refId: res.data ? `REP-${res.data.id}` : 'Pending sync',
+          queued: res.queued ? '1' : '0',
+          trust: res.evidence?.trust_score != null ? String(res.evidence.trust_score) : '',
+          flags: (res.evidence?.flags || []).join(','),
+        },
+      });
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -107,7 +125,6 @@ export default function FormReportScreen() {
           <TouchableOpacity
             style={styles.photoBox}
             onPress={() => {
-              setPhotoUri('https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=600');
               router.push('/camera' as any);
             }}
           >
@@ -122,7 +139,7 @@ export default function FormReportScreen() {
         </View>
       </View>
 
-      <BigButton title="Submit Hazard Report →" onPress={handleSubmit} />
+      <BigButton title="Submit Hazard Report →" onPress={handleSubmit} loading={submitting} />
     </ScrollView>
   );
 }
