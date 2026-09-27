@@ -116,19 +116,21 @@ def mark_attendance(body: AttendanceMark, response: Response, user: User = Depen
 def list_attendance(org_id: int | None = None, mine_id: int | None = None, contractor_id: int | None = None,
                     day: date | None = Query(None, alias="date", description="Indian date, default today"),
                     valid: bool | None = None, gate_entry: bool | None = None,
+                    all_dates: bool = Query(False, description="If true, fetch across all recent dates"),
                     paging: Pagination = Depends(),
                     user: User = Depends(require_roles(*VIEWERS)), db: Session = Depends(get_db)):
-    """Attendance for one day (default today), newest first."""
+    """Attendance for one day (default today) or all recent dates, newest first."""
     contractors = list(db.scalars(visible_contractors_query(db, user, org_id, mine_id)))
     if contractor_id is not None:
         contractors = [c for c in contractors if c.id == contractor_id]
         if not contractors:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Contractor outside your area.")
-    day = day or today_ist()
-    start = ist_day_start_utc(day)
     query = (select(Attendance).join(Worker, Worker.id == Attendance.worker_id)
-             .where(Worker.contractor_id.in_([c.id for c in contractors]),
-                    Attendance.time >= start, Attendance.time < start + timedelta(days=1)))
+             .where(Worker.contractor_id.in_([c.id for c in contractors])))
+    if not all_dates:
+        day = day or today_ist()
+        start = ist_day_start_utc(day)
+        query = query.where(Attendance.time >= start, Attendance.time < start + timedelta(days=1))
     if valid is not None:
         query = query.where(Attendance.valid.is_(valid))
     if gate_entry is not None:

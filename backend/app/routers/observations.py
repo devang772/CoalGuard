@@ -110,13 +110,21 @@ def create_observation(body: ObservationCreate, response: Response, user: User =
                       client_uuid=body.client_uuid, created_at=utcnow())
     db.add(obs)
     db.flush()
+    level = "critical" if obs.type == "incident" or obs.severity == "critical" else "warning" if obs.severity == "high" else "info"
+    mine_name = db.get(OrgUnit, mine_id).name if mine_id else "Mine"
+    recipients = people_for_mine(db, mine_id, MANAGER_AND_GM)
+    if user and user.id not in recipients:
+        recipients.append(user.id)
+
     if needs_action(obs):
         capa = convert_to_action(db, obs)
-        level = "critical" if obs.type == "incident" or obs.severity == "critical" else "warning"
-        mine_name = db.get(OrgUnit, mine_id).name
-        notify(db, people_for_mine(db, mine_id, MANAGER_AND_GM),
+        notify(db, recipients,
                f"{'Incident' if obs.type == 'incident' else 'Serious hazard'} at {mine_name}",
                f"{obs.text} · CAPA #{capa.id} created", level=level, kind="incident", link=f"/capa/{capa.id}")
+    else:
+        notify(db, recipients,
+               f"Hazard Reported at {mine_name}",
+               f"[{obs.type.replace('_', ' ').upper()}] {obs.text}", level=level, kind="incident", link=f"/observations/{obs.id}")
     db.commit()
     return rows(db, [obs])[0]
 

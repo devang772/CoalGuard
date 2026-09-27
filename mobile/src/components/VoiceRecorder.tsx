@@ -6,7 +6,7 @@ import { Audio } from 'expo-av';
 import { colors } from '../theme/colors';
 
 interface VoiceRecorderProps {
-  onRecordingComplete: (uri: string, duration: number) => void;
+  onRecordingComplete: (uri: string, duration: number, localTranscript?: string) => void;
   language: string;
 }
 
@@ -15,6 +15,8 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onRecordingComplet
   const [seconds, setSeconds] = useState(0);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const secondsRef = useRef(0);
+  const speechRef = useRef<any>(null);
+  const localTranscriptRef = useRef<string>('');
 
   useEffect(() => {
     let timer: any;
@@ -35,11 +37,58 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onRecordingComplet
   useEffect(() => {
     return () => {
       recordingRef.current?.stopAndUnloadAsync().catch(() => {});
+      if (speechRef.current) {
+        try { speechRef.current.stop(); } catch (e) {}
+      }
     };
   }, []);
 
   const startRecording = async () => {
     try {
+      localTranscriptRef.current = '';
+
+      // Clean up any existing recording object first to prevent "Only one Recording object can be prepared"
+      if (recordingRef.current) {
+        try {
+          await recordingRef.current.stopAndUnloadAsync();
+        } catch (e) {}
+        recordingRef.current = null;
+      }
+
+      if (speechRef.current) {
+        try { speechRef.current.stop(); } catch (e) {}
+        speechRef.current = null;
+      }
+
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (SpeechRecognition) {
+          try {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            const langMap: Record<string, string> = {
+              hi: 'hi-IN',
+              en: 'en-US',
+              bn: 'bn-IN',
+              or: 'or-IN',
+            };
+            recognition.lang = langMap[language] || 'hi-IN';
+            recognition.onresult = (event: any) => {
+              let text = '';
+              for (let i = 0; i < event.results.length; i++) {
+                text += event.results[i][0].transcript + ' ';
+              }
+              localTranscriptRef.current = text.trim();
+            };
+            recognition.start();
+            speechRef.current = recognition;
+          } catch (e) {
+            console.warn('Local speech recognition init error:', e);
+          }
+        }
+      }
+
       if (Platform.OS === 'web') {
         const problem = webMediaProblem();
         const result = problem ? 'unsupported' : await requestWebMedia('microphone');
@@ -54,17 +103,34 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onRecordingComplet
         return;
       }
       await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      recordingRef.current = recording;
+
+      let rec: Audio.Recording | null = null;
+      try {
+        const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+        rec = recording;
+      } catch (createErr: any) {
+        // If an old recording is still lingering in expo-av, force unload audio mode and retry
+        await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+        await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+        const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+        rec = recording;
+      }
+
+      recordingRef.current = rec;
       secondsRef.current = 0;
       setSeconds(0);
       setIsRecording(true);
     } catch (err: any) {
-      Alert.alert('Recording Error', err?.message || 'Could not start the microphone.');
+      console.error('[VoiceRecorder] Start recording error:', err);
+      Alert.alert('Recording Error', err?.message || 'Could not start the microphone. Please try again.');
     }
   };
 
   const stopRecording = async () => {
+    if (speechRef.current) {
+      try { speechRef.current.stop(); } catch (e) {}
+      speechRef.current = null;
+    }
     const recording = recordingRef.current;
     recordingRef.current = null;
     setIsRecording(false);
@@ -76,16 +142,25 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onRecordingComplet
       // already stopped
     }
     const uri = recording.getURI();
-    if (uri) onRecordingComplete(uri, secondsRef.current);
+    if (uri) onRecordingComplete(uri, secondsRef.current, localTranscriptRef.current);
+  };
+
+  const getHint = (lang: string) => {
+    switch (lang) {
+      case 'hi':
+        return 'क्या हुआ, कहाँ हुआ, कितना गंभीर है बोलें।\nउदाहरण: "कन्वेयर 3 के पास छत में दरार है"';
+      case 'bn':
+        return 'কী ঘটেছে, কোথায় ঘটেছে, কতটা গুরুতর তা বলুন।\nউদাহরণ: "কনভেয়ার ৩ এর কাছে ছাদে ফাটল রয়েছে"';
+      case 'or':
+        return 'କ’ଣ ଘଟିଛି, କେଉଁଠି ଘଟିଛି ବୋଲନ୍ତୁ।\nଉଦାହରଣ: "କନଭେୟର ୩ ନିକଟରେ ଛାତରେ ଫାଟ ଅଛି"';
+      default:
+        return 'Tell what happened, where, and how serious.\nExample: "Roof crack near conveyor 3"';
+    }
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.hint}>
-        {language === 'hi'
-          ? 'क्या हुआ, कहाँ हुआ, कितना गंभीर है बोलें।\nउदाहरण: "कन्वेयर 3 के पास छत में दरार है"'
-          : 'Tell what, where, how serious.\nExample: "Conveyor 3 ke paas roof mein crack hai"'}
-      </Text>
+      <Text style={styles.hint}>{getHint(language)}</Text>
 
       {/* Waveform Bar Simulation */}
       {isRecording && (

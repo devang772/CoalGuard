@@ -125,10 +125,9 @@ export default function HomeScreen() {
           <Feather name="check" size={20} color={colors.emerald} />
         </View>
 
-        {/* Primary Action CTA Button (Matching Reference Screenshot) */}
         <BigButton
           title={isOfficer ? 'Submit Inspection' : 'Report Safety Hazard'}
-          onPress={() => router.push(isOfficer ? ('/inspection/new' as any) : ('/report/voice' as any))}
+          onPress={() => router.push(isOfficer ? ('/inspection/new' as any) : ('/(tabs)/report' as any))}
           style={{ marginVertical: 16 }}
         />
 
